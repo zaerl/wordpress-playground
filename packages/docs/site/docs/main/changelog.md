@@ -9,6 +9,46 @@ All notable changes to this project are documented in this file by a CI job
 that runs on every NPM release. The file follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 format.
 
+## [v1.0.5] (2024-10-25) 
+
+### Enhancements
+
+- [CORS Proxy] Rate-limits IPv6 requests based on /64 subnets, not specific addresses. ([#1923](https://github.com/WordPress/wordpress-playground/pull/1923))
+
+### Blueprints
+
+- Reload after autologin to set login cookies during boot. ([#1914](https://github.com/WordPress/wordpress-playground/pull/1914))
+- Skip empty lines in the runSql step. ([#1939](https://github.com/WordPress/wordpress-playground/pull/1939))
+
+### Documentation
+
+- Clarified wp beta to also include rc version. ([#1936](https://github.com/WordPress/wordpress-playground/pull/1936))
+
+### PHP WebAssembly
+
+- Enable CURL in Playground Web. ([#1935](https://github.com/WordPress/wordpress-playground/pull/1935))
+- PHP: Implement TLS 1.2 to decrypt https:// and ssl:// traffic and translate it into fetch(). ([#1926](https://github.com/WordPress/wordpress-playground/pull/1926))
+
+### Website
+
+- Hide Settings menu after clicking "Restore from .zip. ([#1904](https://github.com/WordPress/wordpress-playground/pull/1904))
+- Publish @wp-playground/remote (types only). ([#1924](https://github.com/WordPress/wordpress-playground/pull/1924))
+
+### Bug Fixes
+
+- CORS Proxy: Index update_at column because it is used for lookup. ([#1931](https://github.com/WordPress/wordpress-playground/pull/1931))
+- CORS Proxy: Reject targeting self. ([#1932](https://github.com/WordPress/wordpress-playground/pull/1932))
+- Docs: Fix typo. ([#1934](https://github.com/WordPress/wordpress-playground/pull/1934))
+- Explicitly request no-cache to discourage WP Cloud from edge caching CORS proxy results. ([#1930](https://github.com/WordPress/wordpress-playground/pull/1930))
+- Remove test code added in #1914. ([#1928](https://github.com/WordPress/wordpress-playground/pull/1928))
+
+### Contributors
+
+The following contributors merged PRs in this release:
+
+@adamziel @ajotka @bgrgicak @bph @brandonpayton @ockham @psrpinto
+
+
 ## [v1.0.4] (2024-10-21)
 
 ### Enhancements
