@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file by a CI job
 that runs on every NPM release. The file follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 format.
 
+## [v1.0.6] (2024-10-28) 
+
+### Website
+
+- Query API: Preserve multiple ?plugin= query params. ([#1947](https://github.com/WordPress/wordpress-playground/pull/1947))
+- [Remote] Enable releasing @wp-playground/remote by making it public. ([#1948](https://github.com/WordPress/wordpress-playground/pull/1948))
+
+### Contributors
+
+The following contributors merged PRs in this release:
+
+@adamziel @bgrgicak
+
+
 ## [v1.0.5] (2024-10-25) 
 
 ### Enhancements
