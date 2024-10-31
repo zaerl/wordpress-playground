@@ -161,10 +161,13 @@ export async function setupPlatformLevelMuPlugins(php: UniversalPHP) {
 			 * WordPress uses cookies to determine if the user is logged in,
 			 * so we need to reload the page to ensure the cookies are set.
 			 *
-			 * Both WordPress home url and REQUEST_URI may include the site scope
-			 * subdirectory.
 			 * To prevent the redirect from including two scopes, we need to
 			 * remove the scope from the REQUEST_URI if it's present.
+			 *
+			 * The WordPress home url always includes a site scope subdirectory.
+			 * We expect the REQUEST_URI to include the site scope subdirectory,
+			 * but if a request is made using a request handler it's possible
+			 * to make a PHP request without including the scope.
 			 */
 			$redirect_url = $_SERVER['REQUEST_URI'];
 			if (strpos($redirect_url, '/scope:') === 0) {
@@ -172,6 +175,14 @@ export async function setupPlatformLevelMuPlugins(php: UniversalPHP) {
 				$redirect_url = '/' . implode('/', array_slice($parts, 2));
 			}
 			wp_redirect(
+				/**
+				 * Safari breaks if the redirect URL is relative so we always
+				 * prepend the home URL.
+				 *
+				 * This is probably a Playground bug because it works with Nginx.
+				 * The issue is tracked here:
+				 * https://github.com/WordPress/wordpress-playground/issues/645
+				 */
 				home_url($redirect_url),
 				302
 			);
