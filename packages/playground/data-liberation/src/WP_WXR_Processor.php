@@ -7,7 +7,6 @@
  * - Ensure we can pause in the middle of an item node, crash, and then resume later
  *   on. This would require setting bookmarks before/after each major parsed entity.
  * - Support wp:tag
- * - Support wp:term
  * - Support wp:category
  * - Support wp:commentmeta
  * - Expose parent node information when emitting objects. E.g. expose the post_id
@@ -79,6 +78,8 @@ class WP_WXR_Processor {
 					return new WXR_Object( 'site_option', array( 'home', $this->get_text_until_matching_closer_tag() ) );
 				case 'wp:author':
 					return new WXR_Object( 'user', $this->parse_author_node() );
+				case 'wp:term':
+					return new WXR_Object( 'term', $this->parse_term_node() );
 				case 'item':
 					return new WXR_Object( 'post', $this->parse_item_node() );
 				case 'wp:postmeta':
@@ -251,6 +252,43 @@ class WP_WXR_Processor {
 		}
 
 		return $author;
+	}
+
+	protected function parse_term_node() {
+		$term = array();
+
+		$depth = $this->xml->get_current_depth();
+		while ( $this->xml->next_tag() ) {
+			if ( $this->xml->get_current_depth() <= $depth ) {
+				break;
+			}
+
+			switch ( $this->xml->get_tag() ) {
+				case 'wp:term_id':
+					$term['term_id'] = $this->get_text_until_matching_closer_tag();
+					break;
+				case 'wp:term_taxonomy':
+					$term['taxonomy'] = $this->get_text_until_matching_closer_tag();
+					break;
+				case 'wp:term_slug':
+					$term['slug'] = $this->get_text_until_matching_closer_tag();
+					break;
+				case 'wp:term_parent':
+					$term['parent'] = $this->get_text_until_matching_closer_tag();
+					break;
+				case 'wp:term_name':
+					$term['name'] = $this->get_text_until_matching_closer_tag();
+					break;
+				case 'wp:term_description':
+					$term['description'] = $this->get_text_until_matching_closer_tag();
+					break;
+				default:
+					throw new \Exception( 'Unknown tag: ' . $this->xml->get_tag() );
+					break;
+			}
+		}
+
+		return $term;
 	}
 
 	protected function get_text_until_matching_closer_tag() {

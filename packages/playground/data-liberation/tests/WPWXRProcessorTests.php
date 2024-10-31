@@ -94,7 +94,7 @@ https://playground.internal/path-not-taken was the second best choice.
         $this->assertFalse($importer->next_object());
     }
 
-    public function test_woo_products_wxr() {
+    public function test_attachments() {
         $importer = new WP_WXR_Processor(
             WP_XML_Processor::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
@@ -158,6 +158,36 @@ https://playground.internal/path-not-taken was the second best choice.
             new WXR_Object('post_meta', [
                 'meta_key' => '_wc_attachment_source',
                 'meta_value' => 'https://raw.githubusercontent.com/wordpress/blueprints/stylish-press/blueprints/stylish-press/woo-product-images/vneck-tee-2.jpg',
+            ]),
+            $importer->next_object()
+        );
+    }
+
+    public function test_terms() {
+        $importer = new WP_WXR_Processor(
+            WP_XML_Processor::from_string(<<<XML
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss>
+                <channel>
+                    <wp:term>
+                        <wp:term_id><![CDATA[9]]></wp:term_id>
+                        <wp:term_taxonomy><![CDATA[slider_category]]></wp:term_taxonomy>
+                        <wp:term_slug><![CDATA[fullscreen_slider]]></wp:term_slug>
+                        <wp:term_parent><![CDATA[]]></wp:term_parent>
+                        <wp:term_name><![CDATA[fullscreen_slider]]></wp:term_name>
+                    </wp:term>
+                </channel>
+            </rss>
+            XML
+            )
+        );
+        $this->assertEquals(
+            new WXR_Object('term', [
+                'term_id' => '9',
+                'taxonomy' => 'slider_category',
+                'slug' => 'fullscreen_slider',
+                'parent' => '',
+                'name' => 'fullscreen_slider',
             ]),
             $importer->next_object()
         );
