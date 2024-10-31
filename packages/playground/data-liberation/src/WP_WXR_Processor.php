@@ -93,8 +93,6 @@ class WP_WXR_Processor {
 					$item['post_title'] = $this->get_text_until_matching_closer_tag();
 					break;
 				case 'link':
-					$item['guid'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'guid':
 					$item['guid'] = $this->get_text_until_matching_closer_tag();
 					break;
@@ -116,44 +114,24 @@ class WP_WXR_Processor {
 				case 'wp:post_id':
 					$item['ID'] = $this->get_text_until_matching_closer_tag();
 					break;
-				case 'wp:post_date':
-					$item['post_date'] = $this->get_text_until_matching_closer_tag();
-					break;
-				case 'wp:post_date_gmt':
-					$item['post_date_gmt'] = $this->get_text_until_matching_closer_tag();
-					break;
-				case 'wp:post_modified':
-					$item['post_modified'] = $this->get_text_until_matching_closer_tag();
-					break;
-				case 'wp:post_modified_gmt':
-					$item['post_modified_gmt'] = $this->get_text_until_matching_closer_tag();
-					break;
-				case 'wp:comment_status':
-					$item['comment_status'] = $this->get_text_until_matching_closer_tag();
-					break;
-				case 'wp:ping_status':
-					$item['ping_status'] = $this->get_text_until_matching_closer_tag();
-					break;
-				case 'wp:post_name':
-					$item['post_name'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:status':
 					$item['post_status'] = $this->get_text_until_matching_closer_tag();
 					break;
+				case 'wp:post_date':
+				case 'wp:post_date_gmt':
+				case 'wp:post_modified':
+				case 'wp:post_modified_gmt':
+				case 'wp:comment_status':
+				case 'wp:ping_status':
+				case 'wp:post_name':
 				case 'wp:post_parent':
-					$item['post_parent'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:menu_order':
-					$item['menu_order'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:post_type':
-					$item['post_type'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:post_password':
-					$item['post_password'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:is_sticky':
-					$item['is_sticky'] = $this->get_text_until_matching_closer_tag();
+				case 'wp:attachment_url':
+                    $key = substr($this->xml->get_tag(), 3);
+					$item[$key] = $this->get_text_until_matching_closer_tag();
 					break;
 				case 'category':
 					$item['terms']['category'][] = $this->get_text_until_matching_closer_tag();
@@ -207,31 +185,16 @@ class WP_WXR_Processor {
 
 			switch ( $this->xml->get_tag() ) {
 				case 'wp:comment_id':
-					$comment['comment_ID'] = $this->get_text_until_matching_closer_tag();
-					break;
-				case 'wp:comment_author':
-					$comment['comment_author'] = $this->get_text_until_matching_closer_tag();
-					break;
+                case 'wp:comment_author':
 				case 'wp:comment_author_email':
-					$comment['comment_author_email'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:comment_author_url':
-					$comment['comment_author_url'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:comment_author_IP':
-					$comment['comment_author_IP'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:comment_date':
-					$comment['comment_date'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:comment_date_gmt':
-					$comment['comment_date_gmt'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:comment_content':
-					$comment['comment_content'] = $this->get_text_until_matching_closer_tag();
-					break;
 				case 'wp:comment_approved':
-					$comment['comment_approved'] = $this->get_text_until_matching_closer_tag();
+                    $key = substr($this->xml->get_tag(), 3);
+					$comment[$key] = $this->get_text_until_matching_closer_tag();
 					break;
 				default:
 					throw new \Exception( 'Unknown tag: ' . $this->xml->get_tag() );
