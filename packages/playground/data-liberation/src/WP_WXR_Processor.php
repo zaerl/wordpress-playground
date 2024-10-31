@@ -6,6 +6,19 @@
  *   if the XML processor was receiving data from a HTTP -> unzip stream?
  * - Ensure we can pause in the middle of an item node, crash, and then resume later
  *   on. This would require setting bookmarks before/after each major parsed entity.
+ * - Support wp:tag
+ * - Support wp:term
+ * - Support wp:category
+ * - Support wp:commentmeta
+ * - Expose parent node information when emitting objects. E.g. expose the post_id
+ *   of a comment or postmeta node.
+ * - Track the currently parsed object using class-level state, not function-level
+ *   state – this is a must for pausing and resuming.
+ * - Decide: Should rewriting site URLs be done here? Or should it be done later on
+ *   in an importer-agnostic way that we could also apply to markdown files, site
+ *   transfers etc.? Fetching assets should not happen in this class for sure.
+ * - Explicitly define and test failure modes. Provide useful error messages with clear
+ *   instructions on how to fix the problem.
  */
 
 class WP_WXR_Processor {
