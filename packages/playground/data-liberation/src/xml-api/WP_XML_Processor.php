@@ -651,8 +651,20 @@ class WP_XML_Processor {
 	 * @see WP_XML_Processor::create_stream()
 	 *
 	 * @param string      $xml            XML to process.
+	 * @param string|null $use_the_static_create_methods_instead This constructor should not be called manually.
 	 */
-	protected function __construct( $xml ) {
+	private function __construct( $xml, $use_the_static_create_methods_instead = null ) {
+		if ( self::CONSTRUCTOR_UNLOCK_CODE !== $use_the_static_create_methods_instead ) {
+			_doing_it_wrong(
+				__METHOD__,
+				sprintf(
+					/* translators: %s: WP_HTML_Processor::create_fragment(). */
+					__( 'Call %s to create an HTML Processor instead of calling the constructor directly.' ),
+					'<code>WP_HTML_Processor::create_fragment()</code>'
+				),
+				'6.4.0'
+			);
+		}
 		$this->xml = $xml;
 	}
 
@@ -3316,4 +3328,18 @@ class WP_XML_Processor {
 	 * @var string
 	 */
 	const PROCESS_CURRENT_NODE = 'process-current-node';
+
+
+	/**
+	 * Unlock code that must be passed into the constructor to create this class.
+	 *
+	 * This class extends the WP_HTML_Tag_Processor, which has a public class
+	 * constructor. Therefore, it's not possible to have a private constructor here.
+	 *
+	 * This unlock code is used to ensure that anyone calling the constructor is
+	 * doing so with a full understanding that it's intended to be a private API.
+	 *
+	 * @access private
+	 */
+	const CONSTRUCTOR_UNLOCK_CODE = 'Use WP_HTML_Processor::create_fragment() instead of calling the class constructor directly.';
 }
