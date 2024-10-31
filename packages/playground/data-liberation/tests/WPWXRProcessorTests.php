@@ -9,22 +9,22 @@ class WPWXRProcessorTests extends TestCase {
             WP_XML_Processor::from_string(file_get_contents(__DIR__ . '/fixtures/wxr-simple.xml'))
         );
         $this->assertEquals(
-            new WXR_Action('update_option', ['blogname', 'My WordPress Website']),
+            new WXR_Object('update_option', ['blogname', 'My WordPress Website']),
             $importer->next_object()
         );
 
         $this->assertEquals(
-            new WXR_Action('update_option', ['siteurl', 'https://playground.internal/path']),
+            new WXR_Object('update_option', ['siteurl', 'https://playground.internal/path']),
             $importer->next_object()
         );
 
         $this->assertEquals(
-            new WXR_Action('update_option', ['home', 'https://playground.internal/path']),
+            new WXR_Object('update_option', ['home', 'https://playground.internal/path']),
             $importer->next_object()
         );
 
         $this->assertEquals(
-            new WXR_Action('create_user', [
+            new WXR_Object('create_user', [
                 'user_login' => 'admin',
                 'user_email' => 'admin@localhost.com',
                 'display_name' => 'admin',
@@ -36,7 +36,7 @@ class WPWXRProcessorTests extends TestCase {
         );
         
         $this->assertEquals(
-            new WXR_Action('create_post', [
+            new WXR_Object('create_post', [
                 'post_title' => '"The Road Not Taken" by Robert Frost',
                 'guid' => 'https://playground.internal/path/?p=1',
                 'post_date' => '2024-06-05 16:04:48',
@@ -76,7 +76,7 @@ https://playground.internal/path-not-taken was the second best choice.
         );
 
         $this->assertEquals(
-            new WXR_Action('create_post_meta', [
+            new WXR_Object('create_post_meta', [
                 'meta_key' => '_pingme',
                 'meta_value' => '1',
             ]),
@@ -84,7 +84,7 @@ https://playground.internal/path-not-taken was the second best choice.
         );
 
         $this->assertEquals(
-            new WXR_Action('create_post_meta', [
+            new WXR_Object('create_post_meta', [
                 'meta_key' => '_encloseme',
                 'meta_value' => '1',
             ]),

@@ -51,7 +51,7 @@ class WP_WXR_Processor {
 
 			switch ( $this->xml->get_tag() ) {
 				case 'title':
-					return new WXR_Action( 'update_option', array( 'blogname', $this->get_text_until_matching_closer_tag() ) );
+					return new WXR_Object( 'update_option', array( 'blogname', $this->get_text_until_matching_closer_tag() ) );
 				case 'link':
 				case 'description':
 				case 'pubDate':
@@ -61,17 +61,17 @@ class WP_WXR_Processor {
 					// ignore this metadata
 					break;
 				case 'wp:base_site_url':
-					return new WXR_Action( 'update_option', array( 'siteurl', $this->get_text_until_matching_closer_tag() ) );
+					return new WXR_Object( 'update_option', array( 'siteurl', $this->get_text_until_matching_closer_tag() ) );
 				case 'wp:base_blog_url':
-					return new WXR_Action( 'update_option', array( 'home', $this->get_text_until_matching_closer_tag() ) );
+					return new WXR_Object( 'update_option', array( 'home', $this->get_text_until_matching_closer_tag() ) );
 				case 'wp:author':
-					return new WXR_Action( 'create_user', $this->parse_author_node() );
+					return new WXR_Object( 'create_user', $this->parse_author_node() );
 				case 'item':
-					return new WXR_Action( 'create_post', $this->parse_item_node() );
+					return new WXR_Object( 'create_post', $this->parse_item_node() );
 				case 'wp:postmeta':
-					return new WXR_Action( 'create_post_meta', $this->parse_post_meta_node() );
+					return new WXR_Object( 'create_post_meta', $this->parse_post_meta_node() );
 				case 'wp:comment':
-					return new WXR_Action( 'create_comment', $this->parse_comment_node() );
+					return new WXR_Object( 'create_comment', $this->parse_comment_node() );
 				default:
 					throw new \Exception( 'Unknown tag: ' . $this->xml->get_tag() );
 					break;
@@ -308,12 +308,12 @@ class WP_WXR_Processor {
 	}
 }
 
-class WXR_Action {
-	public $action_type;
+class WXR_Object {
+	public $object_type;
 	public $data;
 
-	public function __construct( $action_type, $data ) {
-		$this->action_type = $action_type;
+	public function __construct( $object_type, $data ) {
+		$this->object_type = $object_type;
 		$this->data        = $data;
 	}
 }
