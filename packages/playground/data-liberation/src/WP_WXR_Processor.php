@@ -142,6 +142,13 @@ class WP_WXR_Processor {
 			}
 		}
 		do {
+			// Skip the top-level "image" tag.
+			if ( 
+				'image' === $this->xml->get_tag() ||
+				$this->xml->matches_breadcrumbs(['image', '*'])
+			) {
+				continue;
+			}
 			switch ( $this->xml->get_tag() ) {
 				case 'rss':
 				case 'channel':
@@ -341,6 +348,12 @@ class WP_WXR_Processor {
 
 	protected function step_in_category() {
 		switch ( $this->xml->get_tag() ) {
+			case 'wp:term_id':
+				$this->object_data['term_id'] = $this->get_text_until_matching_closer_tag();
+				break;
+			case 'wp:category_description':
+				$this->object_data['description'] = $this->get_text_until_matching_closer_tag();
+				break;
 			case 'wp:category_nicename':
 				$this->object_data['nicename'] = $this->get_text_until_matching_closer_tag();
 				break;
