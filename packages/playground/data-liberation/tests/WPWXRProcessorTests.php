@@ -193,4 +193,58 @@ https://playground.internal/path-not-taken was the second best choice.
         );
     }
 
+    public function test_category() {
+        $importer = new WP_WXR_Processor(
+            WP_XML_Processor::from_string(<<<XML
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss>
+                <channel>
+                    <wp:category>
+                        <wp:category_nicename>uncategorized</wp:category_nicename>
+                        <wp:category_parent></wp:category_parent>
+                        <wp:cat_name><![CDATA[Uncategorized]]></wp:cat_name>
+                    </wp:category>
+                </channel>
+            </rss>
+            XML
+            )
+        );
+        $this->assertEquals(
+            new WXR_Object('category', [
+                'nicename' => 'uncategorized',
+                'parent' => '',
+                'name' => 'Uncategorized',
+            ]),
+            $importer->next_object()
+        );
+    }
+
+    public function test_tag() {
+        $importer = new WP_WXR_Processor(
+            WP_XML_Processor::from_string(<<<XML
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss>
+                <channel>
+                    <wp:tag>
+                        <wp:term_id>651</wp:term_id>
+                        <wp:tag_slug>articles</wp:tag_slug>
+                        <wp:tag_name><![CDATA[Articles]]></wp:tag_name>
+                        <wp:tag_description><![CDATA[Tags posts about Articles.]]></wp:tag_description>
+                    </wp:tag>
+                </channel>
+            </rss>
+            XML
+            )
+        );
+        $this->assertEquals(
+            new WXR_Object('tag', [
+                'term_id' => '651',
+                'slug' => 'articles',
+                'name' => 'Articles',
+                'description' => 'Tags posts about Articles.',
+            ]),
+            $importer->next_object()
+        );
+    }
+
 }

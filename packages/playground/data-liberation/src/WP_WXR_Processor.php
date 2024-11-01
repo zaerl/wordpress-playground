@@ -6,7 +6,6 @@
  *   if the XML processor was receiving data from a HTTP -> unzip stream?
  * - Ensure we can pause in the middle of an item node, crash, and then resume later
  *   on. This would require setting bookmarks before/after each major parsed entity.
- * - Support wp:tag
  * - Support wp:category
  * - Support wp:commentmeta
  * - Expose parent node information when emitting objects. E.g. expose the post_id
@@ -25,6 +24,12 @@ class WP_WXR_Processor {
 	private $xml;
 
 	private $token_to_process = self::PROCESS_NEXT_TOKEN;
+    
+    private $current_object_type;
+    private $current_object_data;
+    private $current_object_depth;
+
+    private $is_paused_on_incomplete_object = false;
 
 	const PROCESS_NEXT_TOKEN    = 'PROCESS_NEXT_TOKEN';
 	const PROCESS_CURRENT_TOKEN = 'PROCESS_CURRENT_TOKEN';
@@ -63,7 +68,9 @@ class WP_WXR_Processor {
 
 			switch ( $this->xml->get_tag() ) {
 				case 'title':
-					return new WXR_Object( 'site_option', array( 'blogname', $this->get_text_until_matching_closer_tag() ) );
+					$this->current_object_type = 'site_option';
+					$this->current_object_data = array( 'blogname', $this->get_text_until_matching_closer_tag() );
+					break;
 				case 'link':
 				case 'description':
 				case 'pubDate':
@@ -73,19 +80,39 @@ class WP_WXR_Processor {
 					// ignore this metadata
 					break;
 				case 'wp:base_site_url':
-					return new WXR_Object( 'site_option', array( 'siteurl', $this->get_text_until_matching_closer_tag() ) );
+                    $this->current_object_type = 'site_option';
+					$this->current_object_data = array( 'siteurl', $this->get_text_until_matching_closer_tag() );
+					break;
 				case 'wp:base_blog_url':
-					return new WXR_Object( 'site_option', array( 'home', $this->get_text_until_matching_closer_tag() ) );
+					$this->current_object_type = 'site_option';
+					$this->current_object_data = array( 'home', $this->get_text_until_matching_closer_tag() );
+					break;
+
 				case 'wp:author':
-					return new WXR_Object( 'user', $this->parse_author_node() );
+                    $this->current_object_depth = $this->xml->get_current_depth();
+					$this->current_object_type = 'user';
+                    $this->current_object_data = array();
+					break;
+
 				case 'wp:term':
-					return new WXR_Object( 'term', $this->parse_term_node() );
+					$this->current_object_type = 'term';
+					$this->current_object_data = $this->parse_term_node();
+					break;
 				case 'item':
-					return new WXR_Object( 'post', $this->parse_item_node() );
+					$this->current_object_type = 'post';
+					$this->current_object_data = $this->parse_item_node();
+					break;
+				case 'wp:tag':
+					$this->current_object_type = 'tag';
+					$this->current_object_data = $this->parse_tag_node();
 				case 'wp:postmeta':
-					return new WXR_Object( 'post_meta', $this->parse_post_meta_node() );
+					$this->current_object_type = 'post_meta';
+					$this->current_object_data = $this->parse_post_meta_node();
+					break;
 				case 'wp:comment':
-					return new WXR_Object( 'comment', $this->parse_comment_node() );
+					$this->current_object_type = 'comment';
+					$this->current_object_data = $this->parse_comment_node();
+					break;
 				default:
 					throw new \Exception( 'Unknown tag: ' . $this->xml->get_tag() );
 					break;
@@ -188,6 +215,37 @@ class WP_WXR_Processor {
 		return $post_meta;
 	}
 
+	protected function parse_tag_node() {
+		$tag = array();
+
+		$depth = $this->xml->get_current_depth();
+		while ( $this->xml->next_tag() ) {
+			if ( $this->xml->get_current_depth() <= $depth ) {
+				break;
+			}
+
+			switch ( $this->xml->get_tag() ) {
+				case 'wp:term_id':
+					$tag['term_id'] = $this->get_text_until_matching_closer_tag();
+					break;
+				case 'wp:tag_slug':
+					$tag['slug'] = $this->get_text_until_matching_closer_tag();
+					break;
+				case 'wp:tag_name':
+					$tag['name'] = $this->get_text_until_matching_closer_tag();
+					break;
+				case 'wp:tag_description':
+					$tag['description'] = $this->get_text_until_matching_closer_tag();
+					break;
+				default:
+					throw new \Exception( 'Unknown tag: ' . $this->xml->get_tag() );
+					break;
+			}
+		}
+
+		return $tag;
+	}
+
 	protected function parse_comment_node() {
 		$comment = array();
 
@@ -218,32 +276,29 @@ class WP_WXR_Processor {
 	}
 
 	protected function parse_author_node() {
-		$author = array();
-
-		$depth = $this->xml->get_current_depth();
-		while ( $this->xml->next_tag() ) {
-			if ( $this->xml->get_current_depth() <= $depth ) {
+		while ( true ) {
+			if ( $this->xml->get_current_depth() <= $this->current_object_depth ) {
 				break;
 			}
 
 			switch ( $this->xml->get_tag() ) {
 				case 'wp:author_id':
-					$author['ID'] = $this->get_text_until_matching_closer_tag();
+					$this->current_object_data['ID'] = $this->get_text_until_matching_closer_tag();
 					break;
 				case 'wp:author_login':
-					$author['user_login'] = $this->get_text_until_matching_closer_tag();
+					$this->current_object_data['user_login'] = $this->get_text_until_matching_closer_tag();
 					break;
 				case 'wp:author_email':
-					$author['user_email'] = $this->get_text_until_matching_closer_tag();
+					$this->current_object_data['user_email'] = $this->get_text_until_matching_closer_tag();
 					break;
 				case 'wp:author_display_name':
-					$author['display_name'] = $this->get_text_until_matching_closer_tag();
+					$this->current_object_data['display_name'] = $this->get_text_until_matching_closer_tag();
 					break;
 				case 'wp:author_first_name':
-					$author['first_name'] = $this->get_text_until_matching_closer_tag();
+					$this->current_object_data['first_name'] = $this->get_text_until_matching_closer_tag();
 					break;
 				case 'wp:author_last_name':
-					$author['last_name'] = $this->get_text_until_matching_closer_tag();
+					$this->current_object_data['last_name'] = $this->get_text_until_matching_closer_tag();
 					break;
 				default:
 					throw new \Exception( 'Unknown tag: ' . $this->xml->get_tag() );
@@ -251,7 +306,7 @@ class WP_WXR_Processor {
 			}
 		}
 
-		return $author;
+		return true;
 	}
 
 	protected function parse_term_node() {
