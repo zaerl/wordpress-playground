@@ -35,13 +35,6 @@ class WPWXRProcessorTests extends TestCase {
             while(true === $wxr->next_object()) {
                 ++$found_objects;
             }
-            if($wxr->get_last_error()) {
-                // @TODO: This kicks in when appending 100 bytes but
-                // not when appending 10 bytes. Let's
-                // get to the bottom of this.
-                var_dump($wxr->get_last_error());
-                break;
-            }
         }
 
         $this->assertEquals($expected_objects, $found_objects);
@@ -49,20 +42,20 @@ class WPWXRProcessorTests extends TestCase {
 
     public function preexisting_wxr_files_provider() {
         return [
-            // [__DIR__ . '/wxr/a11y-unit-test-data.xml', 1043],
-            // [__DIR__ . '/wxr/crazy-cdata-escaped.xml', 5],
-            // [__DIR__ . '/wxr/crazy-cdata.xml', 5],
-            // [__DIR__ . '/wxr/invalid-version-tag.xml', 57],
-            // [__DIR__ . '/wxr/missing-version-tag.xml', 57],
-            // [__DIR__ . '/wxr/slashes.xml', 9],
-            // [__DIR__ . '/wxr/small-export.xml', 68],
-            // [__DIR__ . '/wxr/test-serialized-postmeta-no-cdata.xml', 5],
-            // [__DIR__ . '/wxr/test-serialized-postmeta-with-cdata.xml', 7],
-            // [__DIR__ . '/wxr/test-utw-post-meta-import.xml', 5],
+            [__DIR__ . '/wxr/a11y-unit-test-data.xml', 1043],
+            [__DIR__ . '/wxr/crazy-cdata-escaped.xml', 5],
+            [__DIR__ . '/wxr/crazy-cdata.xml', 5],
+            [__DIR__ . '/wxr/invalid-version-tag.xml', 57],
+            [__DIR__ . '/wxr/missing-version-tag.xml', 57],
+            [__DIR__ . '/wxr/slashes.xml', 9],
+            [__DIR__ . '/wxr/small-export.xml', 68],
+            [__DIR__ . '/wxr/test-serialized-postmeta-no-cdata.xml', 5],
+            [__DIR__ . '/wxr/test-serialized-postmeta-with-cdata.xml', 7],
+            [__DIR__ . '/wxr/test-utw-post-meta-import.xml', 5],
             [__DIR__ . '/wxr/theme-unit-test-data.xml', 1146],
-            // [__DIR__ . '/wxr/valid-wxr-1.0.xml', 32],
-            // [__DIR__ . '/wxr/valid-wxr-1.1.xml', 11],
-            // [__DIR__ . '/wxr/woocommerce-demo-products.xml', 975],
+            [__DIR__ . '/wxr/valid-wxr-1.0.xml', 32],
+            [__DIR__ . '/wxr/valid-wxr-1.1.xml', 11],
+            [__DIR__ . '/wxr/woocommerce-demo-products.xml', 975],
         ];
     }
 
@@ -430,7 +423,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 </channel>
             </rss>
             XML
-    );
+        );
         $this->assertTrue( $wxr->next_object() );
         $this->assertEquals(
             'post',

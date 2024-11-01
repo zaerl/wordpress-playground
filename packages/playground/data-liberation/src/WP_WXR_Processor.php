@@ -266,7 +266,8 @@ class WP_WXR_Processor {
 	}
 
 	protected function step_in_post() {
-		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		$breadcrumbs = $this->xml->get_breadcrumbs();
+		$closest_tag = end( $breadcrumbs );
 		switch ( $closest_tag ) {
 			case 'item':
 				// Ignore the opener.
@@ -334,7 +335,8 @@ class WP_WXR_Processor {
 	}
 
 	protected function step_in_post_meta() {
-		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		$breadcrumbs = $this->xml->get_breadcrumbs();
+		$closest_tag = end( $breadcrumbs );
 		switch ( $closest_tag ) {
 			case 'wp:postmeta':
 				// Ignore the opener.
@@ -354,7 +356,8 @@ class WP_WXR_Processor {
 	}
 
 	protected function step_in_comment_meta() {
-		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		$breadcrumbs = $this->xml->get_breadcrumbs();
+		$closest_tag = end( $breadcrumbs );
 		switch ( $closest_tag ) {
 			case 'wp:commentmeta':
 				// Ignore the opener.
@@ -377,7 +380,8 @@ class WP_WXR_Processor {
 		if('#tag' === $this->xml->get_token_type() && !$this->xml->is_tag_opener()) {
 			return true;
 		}
-		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		$breadcrumbs = $this->xml->get_breadcrumbs();
+		$closest_tag = end( $breadcrumbs );
 		switch ( $closest_tag ) {
 			case 'wp:tag':
 				// Ignore the opener.
@@ -402,7 +406,8 @@ class WP_WXR_Processor {
 	}
 
 	protected function step_in_category() {
-		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		$breadcrumbs = $this->xml->get_breadcrumbs();
+		$closest_tag = end( $breadcrumbs );
 		switch ( $closest_tag ) {
 			case 'wp:category':
 				// Ignore the opener.
@@ -430,7 +435,8 @@ class WP_WXR_Processor {
 	}
 
 	protected function step_in_comment() {
-		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		$breadcrumbs = $this->xml->get_breadcrumbs();
+		$closest_tag = end( $breadcrumbs );
 		switch ( $closest_tag ) {
 			case 'wp:comment':
 				// Ignore the opener.
@@ -464,7 +470,8 @@ class WP_WXR_Processor {
 	}
 
 	protected function step_in_user() {
-		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		$breadcrumbs = $this->xml->get_breadcrumbs();
+		$closest_tag = end( $breadcrumbs );
 		switch ( $closest_tag ) {
 			case 'wp:author':
 			case 'wp:wp_author':
@@ -496,7 +503,8 @@ class WP_WXR_Processor {
 	}
 
 	protected function step_in_term() {
-		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		$breadcrumbs = $this->xml->get_breadcrumbs();
+		$closest_tag = end( $breadcrumbs );
 		switch ( $closest_tag ) {
 			case 'wp:term':
 				// Ignore the opener.
