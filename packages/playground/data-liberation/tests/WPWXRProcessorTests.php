@@ -7,14 +7,41 @@ class WPWXRProcessorTests extends TestCase {
     /**
      * @dataProvider preexisting_wxr_files_provider
      */
-    public function test_does_not_crash_when_parsing_preexisting_wxr_files($path, $expected_objects) {
-        $wxr = new WP_WXR_Processor(
-            WP_XML_Processor::from_string(file_get_contents($path))
-        );
+    public function test_does_not_crash_when_parsing_preexisting_wxr_files_as_string($path, $expected_objects) {
+        $wxr = WP_WXR_Processor::from_string(file_get_contents($path));
 
         $found_objects = 0;
         while( $wxr->next_object() ) {
             ++$found_objects;
+        }
+
+        $this->assertEquals($expected_objects, $found_objects);
+    }
+
+    /**
+     * @dataProvider preexisting_wxr_files_provider
+     */
+    public function test_does_not_crash_when_parsing_preexisting_wxr_files_as_stream($path, $expected_objects) {
+        $stream = fopen($path, 'r');
+        $wxr = WP_WXR_Processor::from_stream();
+        $found_objects = 0;
+        while(true) {
+            if(true === $wxr->next_object()) {
+                ++$found_objects;
+                continue;
+            }
+
+            if(!$wxr->is_paused_at_incomplete_input()) {
+                break;
+            }
+            // @TODO: This test breaks when appending 100 bytes but
+            // succeeds when appending 10 bytes. Let's
+            // get to the bottom of this.
+            $chunk = fread($stream, 100);
+            if(false === $chunk || feof($stream)) {
+                break;
+            }
+            $wxr->append_bytes($chunk);
         }
 
         $this->assertEquals($expected_objects, $found_objects);
@@ -41,9 +68,7 @@ class WPWXRProcessorTests extends TestCase {
 
 
     public function test_simple_wxr() {
-        $importer = new WP_WXR_Processor(
-            WP_XML_Processor::from_string(file_get_contents(__DIR__ . '/fixtures/wxr-simple.xml'))
-        );
+        $importer = WP_WXR_Processor::from_string(file_get_contents(__DIR__ . '/fixtures/wxr-simple.xml'));
         $this->assertTrue( $importer->next_object() );
         $this->assertEquals(
             'site_option',
@@ -97,7 +122,9 @@ class WPWXRProcessorTests extends TestCase {
             [
                 'post_title' => '"The Road Not Taken" by Robert Frost',
                 'guid' => 'https://playground.internal/path/?p=1',
+                'link' => 'https://playground.internal/path/?p=1',
                 'post_date' => '2024-06-05 16:04:48',
+                'post_published_at' => 'Wed, 05 Jun 2024 16:04:48 +0000',
                 'post_author' => 'admin',
                 'post_excerpt' => '',
                 'post_content' => '<!-- wp:paragraph -->
@@ -155,8 +182,7 @@ https://playground.internal/path-not-taken was the second best choice.
     }
 
     public function test_attachments() {
-        $importer = new WP_WXR_Processor(
-            WP_XML_Processor::from_string(<<<XML
+        $importer = WP_WXR_Processor::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
@@ -190,8 +216,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 </channel>
             </rss>
             XML
-            )
-        );
+    );
         $this->assertTrue( $importer->next_object() );
         $this->assertEquals(
             'post',
@@ -202,10 +227,12 @@ https://playground.internal/path-not-taken was the second best choice.
                 'post_title' => 'vneck-tee-2.jpg',
                 'ID' => '31',
                 'guid' => 'https://raw.githubusercontent.com/wordpress/blueprints/stylish-press/blueprints/stylish-press/woo-product-images/vneck-tee-2.jpg',
+                'link' => 'https://stylish-press.wordpress.org/?attachment_id=31',
+                'post_published_at' => 'Wed, 16 Jan 2019 13:01:56 +0000',
                 'post_date' => '2019-01-16 13:01:56',
+                'post_date_gmt' => '2019-01-16 13:01:56',
                 'post_author' => 'shopmanager',
                 'post_excerpt' => '',
-                'post_date_gmt' => '2019-01-16 13:01:56',
                 'comment_status' => 'open',
                 'ping_status' => 'closed',
                 'post_name' => 'vneck-tee-2-jpg',
@@ -235,8 +262,7 @@ https://playground.internal/path-not-taken was the second best choice.
     }
 
     public function test_terms() {
-        $importer = new WP_WXR_Processor(
-            WP_XML_Processor::from_string(<<<XML
+        $importer = WP_WXR_Processor::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
@@ -250,8 +276,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 </channel>
             </rss>
             XML
-            )
-        );
+    );
         $this->assertTrue( $importer->next_object() );
         $this->assertEquals(
             'term',
@@ -270,8 +295,7 @@ https://playground.internal/path-not-taken was the second best choice.
     }
 
     public function test_category() {
-        $importer = new WP_WXR_Processor(
-            WP_XML_Processor::from_string(<<<XML
+        $importer = WP_WXR_Processor::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
@@ -283,8 +307,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 </channel>
             </rss>
             XML
-            )
-        );
+    );
         $this->assertTrue( $importer->next_object() );
         $this->assertEquals(
             'category',
@@ -300,9 +323,9 @@ https://playground.internal/path-not-taken was the second best choice.
         );
     }
 
-    public function test_tag() {
-        $wxr = new WP_WXR_Processor(
-            WP_XML_Processor::from_string(<<<XML
+    public function test_tag_string() {
+        $wxr = WP_WXR_Processor::from_string(
+            <<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
@@ -315,7 +338,6 @@ https://playground.internal/path-not-taken was the second best choice.
                 </channel>
             </rss>
             XML
-            )
         );
         $this->assertTrue( $wxr->next_object() );
         $this->assertEquals(
@@ -333,9 +355,54 @@ https://playground.internal/path-not-taken was the second best choice.
         );
     }
 
+    public function test_tag_streaming() {
+        $wxr = <<<XML
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss>
+                <channel>
+                    <wp:tag>
+                        <wp:term_id>651</wp:term_id>
+                        <wp:tag_slug>articles</wp:tag_slug>
+                        <wp:tag_name><![CDATA[Articles]]> for <![CDATA[everyone]]></wp:tag_name>
+                        <wp:tag_description><![CDATA[Tags posts about Articles.]]></wp:tag_description>
+                    </wp:tag>
+                </channel>
+            </rss>
+        XML;
+        $chunks = str_split($wxr, 10);
+
+        $wxr = WP_WXR_Processor::from_stream();
+        while(true) {
+            if(true === $wxr->next_object()) {
+                break;
+            }
+
+            if($wxr->is_paused_at_incomplete_input()) {
+                $chunk = array_shift($chunks);
+                $wxr->append_bytes($chunk);
+                continue;
+            } else {
+                break;
+            }
+        }
+
+        $this->assertEquals(
+            'tag',
+            $wxr->get_object_type()
+        );
+        $this->assertEquals(
+            [
+                'term_id' => '651',
+                'slug' => 'articles',
+                'name' => 'Articles for everyone',
+                'description' => 'Tags posts about Articles.',
+            ],
+            $wxr->get_object_data()
+        );
+    }
+
     public function test_parse_comment() {
-        $wxr = new WP_WXR_Processor(
-            WP_XML_Processor::from_string(<<<XML
+        $wxr = WP_WXR_Processor::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
@@ -363,8 +430,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 </channel>
             </rss>
             XML
-            )
-        );
+    );
         $this->assertTrue( $wxr->next_object() );
         $this->assertEquals(
             'post',
@@ -415,8 +481,7 @@ https://playground.internal/path-not-taken was the second best choice.
     }
 
     public function test_retains_last_ids() {
-        $wxr = new WP_WXR_Processor(
-            WP_XML_Processor::from_string(<<<XML
+        $wxr = WP_WXR_Processor::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
@@ -444,8 +509,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 </channel>
             </rss>
             XML
-            )
-        );
+    );
         $this->assertTrue( $wxr->next_object() );
         $this->assertEquals('post', $wxr->get_object_type());
         $this->assertEquals( 10, $wxr->get_last_post_id() );

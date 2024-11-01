@@ -1677,4 +1677,22 @@ class WPXMLProcessorTests extends TestCase {
 		}
 		$this->assertTrue( $processor->is_paused_at_incomplete_input(), 'Did not indicate that the XML input was incomplete.' );
 	}
+
+	/**
+	 * @ticket 61365
+	 *
+	 * @covers WP_XML_Processor::next_token
+	 */
+	public function test_text_nodes_are_not_exposed_until_their_full_content_is_available() {
+		$processor = WP_XML_Processor::from_stream(
+			'<root>text'
+		);
+		$this->assertTrue( $processor->next_tag(), 'Did not find a tag.' );
+		$this->assertFalse( $processor->next_token(), 'Found a text node before it was fully available.' );
+		$processor->append_bytes( ', more text' );
+		$this->assertFalse( $processor->next_token(), 'Found a text node before it was fully available.' );
+		$processor->append_bytes( ', and even more text</root>' );
+		$this->assertTrue( $processor->next_token(), 'Did not find a tag after appending more text.' );
+		$this->assertEquals( 'text, more text, and even more text', $processor->get_modifiable_text(), 'Did not find the expected text.' );
+	}
 }

@@ -15,6 +15,9 @@
 
 class WP_WXR_Processor {
 
+	/**
+	 * @var WP_XML_Processor
+	 */
 	private $xml;
 
     private $object_type;
@@ -24,8 +27,17 @@ class WP_WXR_Processor {
 	private $last_post_id = null;
 	private $last_comment_id = null;
 
-	public function __construct( WP_XML_Processor $xml ) {
-		$this->xml = $xml;
+	static public function from_string( $wxr_bytes = '' ) {
+		return new WP_WXR_Processor( WP_XML_Processor::from_string( $wxr_bytes ) );
+	}
+	
+	static public function from_stream( $wxr_bytes = '' ) {
+		return new WP_WXR_Processor( WP_XML_Processor::from_stream( $wxr_bytes ) );
+	}
+
+	protected function __construct($xml)
+	{
+		$this->xml = $xml;		
 	}
 
 	public function get_object_type() {
@@ -44,6 +56,26 @@ class WP_WXR_Processor {
 		return $this->last_comment_id;
 	}
 
+	public function append_bytes( string $bytes ) {
+		$this->xml->append_bytes( $bytes );
+	}
+
+	public function input_finished(): void {
+		$this->xml->input_finished();
+	}
+	
+	public function is_finished(): bool {
+		return $this->xml->is_finished();
+	}
+
+	public function is_paused_at_incomplete_input(): bool {
+		return $this->xml->is_paused_at_incomplete_input();
+	}
+
+	public function get_last_error(): ?string {
+		return $this->xml->get_last_error();
+	}
+
 	public function next_object() {
 		if ( 
 			$this->xml->is_finished() ||
@@ -54,6 +86,9 @@ class WP_WXR_Processor {
 
 		if ( $this->object_finished ) {
 			$this->after_object();
+		}
+
+		if ( null === $this->object_type ) {
 			if ( false === $this->find_next_object() ) {
 				return false;
 			}
@@ -61,24 +96,21 @@ class WP_WXR_Processor {
 		}
 
 		while ( ! $this->object_finished ) {
-			while ( false !== $this->xml->next_token() ) {
-				if ( '#tag' !== $this->xml->get_token_type()) {
-					continue;
-				}
-				if (
-					$this->xml->is_tag_closer() &&
-					$this->xml->get_current_depth() <= $this->object_depth 
-				) {
-					// We've stepped out of the current object, let's emit it
-					$this->object_finished = true;
-					return true;
-				} else if ( ! $this->xml->is_tag_closer() && ! $this->xml->is_empty_element() ) {
-					break;
-				}
+			if ( false === $this->xml->next_token() ) {
+				return false;
 			}
-			if ( '#tag' !== $this->xml->get_token_type() ) {
-				break;
+
+			if (
+				$this->xml->is_tag_closer() &&
+				$this->xml->get_current_depth() < $this->object_depth 
+			) {
+				// We've stepped out of the current object, let's emit it
+				$this->object_finished = true;
+				return true;
+			} else if ( $this->xml->is_empty_element() ) {
+				continue;
 			}
+
 			switch ( $this->object_type ) {
 				case 'term':
 					$success = $this->step_in_term();
@@ -149,7 +181,7 @@ class WP_WXR_Processor {
 			) {
 				continue;
 			}
-			switch ( $this->xml->get_tag() ) {
+			switch ( end( $this->xml->get_breadcrumbs() ) ) {
 				case 'rss':
 				case 'channel':
 				case 'link':
@@ -234,35 +266,42 @@ class WP_WXR_Processor {
 	}
 
 	protected function step_in_post() {
-		switch ( $this->xml->get_tag() ) {
+		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		switch ( $closest_tag ) {
+			case 'item':
+				// Ignore the opener.
+				break;
 			case 'title':
-				$this->object_data['post_title'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['post_title'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'link':
+				$this->object_data['link'] .= $this->get_text_until_matching_closer_tag();
+				break;
 			case 'guid':
-				$this->object_data['guid'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['guid'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'description':
-				$this->object_data['post_excerpt'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['post_excerpt'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'pubDate':
-				$this->object_data['post_date'] = $this->get_text_until_matching_closer_tag();
+				// @TODO: What would be the right key here?
+				$this->object_data['post_published_at'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'dc:creator':
-				$this->object_data['post_author'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['post_author'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'content:encoded':
-				$this->object_data['post_content'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['post_content'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'excerpt:encoded':
-				$this->object_data['post_excerpt'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['post_excerpt'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:post_id':
-				$this->object_data['ID'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['ID'] .= $this->get_text_until_matching_closer_tag();
 				$this->last_post_id = $this->object_data['ID'];
 				break;
 			case 'wp:status':
-				$this->object_data['post_status'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['post_status'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:post_date':
 			case 'wp:post_date_gmt':
@@ -278,32 +317,36 @@ class WP_WXR_Processor {
 			case 'wp:is_sticky':
 			case 'wp:attachment_url':
 				$key = substr($this->xml->get_tag(), 3);
-				$this->object_data[$key] = $this->get_text_until_matching_closer_tag();
+				$this->object_data[$key] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'category':
-				$this->object_data['terms']['category'][] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['terms']['category'][] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:postmeta':
 			case 'wp:comment':
 				$this->object_finished = true;
 				break;
 			default:
-				throw new \Exception( 'Unexpected tag inside post: ' . $this->xml->get_tag() );
+				throw new \Exception( 'Unexpected tag inside post: ' . $closest_tag );
 				break;
 		}
 		return true;
 	}
 
 	protected function step_in_post_meta() {
-		switch ( $this->xml->get_tag() ) {
+		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		switch ( $closest_tag ) {
+			case 'wp:postmeta':
+				// Ignore the opener.
+				break;
 			case 'wp:meta_key':
-				$this->object_data['meta_key'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['meta_key'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:meta_value':
-				$this->object_data['meta_value'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['meta_value'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			default:
-				throw new \Exception( 'Unknown tag: ' . $this->xml->get_tag() );
+				throw new \Exception( 'Unknown tag: ' . $closest_tag );
 				break;
 		}
 
@@ -311,15 +354,19 @@ class WP_WXR_Processor {
 	}
 
 	protected function step_in_comment_meta() {
-		switch ( $this->xml->get_tag() ) {
+		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		switch ( $closest_tag ) {
+			case 'wp:commentmeta':
+				// Ignore the opener.
+				break;
 			case 'wp:meta_key':
-				$this->object_data['meta_key'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['meta_key'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:meta_value':
-				$this->object_data['meta_value'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['meta_value'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			default:
-				throw new \Exception( 'Unknown tag: ' . $this->xml->get_tag() );
+				throw new \Exception( 'Unknown tag: ' . $closest_tag );
 				break;
 		}
 
@@ -327,54 +374,69 @@ class WP_WXR_Processor {
 	}
 
 	protected function step_in_tag() {
-		switch ( $this->xml->get_tag() ) {
+		if('#tag' === $this->xml->get_token_type() && !$this->xml->is_tag_opener()) {
+			return true;
+		}
+		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		switch ( $closest_tag ) {
+			case 'wp:tag':
+				// Ignore the opener.
+				break;
 			case 'wp:term_id':
-				$this->object_data['term_id'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['term_id'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:tag_slug':
-				$this->object_data['slug'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['slug'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:tag_name':
-				$this->object_data['name'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['name'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:tag_description':
-				$this->object_data['description'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['description'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			default:
-				throw new \Exception( 'Unknown XML tag when processing wp:tag: ' . $this->xml->get_tag() );
+				throw new \Exception( 'Unknown XML tag when processing wp:tag: ' . $closest_tag );
 				break;
 		}
 		return true;
 	}
 
 	protected function step_in_category() {
-		switch ( $this->xml->get_tag() ) {
+		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		switch ( $closest_tag ) {
+			case 'wp:category':
+				// Ignore the opener.
+				break;
 			case 'wp:term_id':
-				$this->object_data['term_id'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['term_id'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:category_description':
-				$this->object_data['description'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['description'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:category_nicename':
-				$this->object_data['nicename'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['nicename'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:category_parent':
-				$this->object_data['parent'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['parent'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:cat_name':
-				$this->object_data['name'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['name'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			default:
-				throw new \Exception( 'Unexpected tag inside category: ' . $this->xml->get_tag() );
+				throw new \Exception( 'Unexpected tag inside category: ' . $closest_tag );
 				break;
 		}
 		return true;
 	}
 
 	protected function step_in_comment() {
-		switch ( $this->xml->get_tag() ) {
+		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		switch ( $closest_tag ) {
+			case 'wp:comment':
+				// Ignore the opener.
+				break;
 			case 'wp:comment_id':
-				$this->object_data['ID'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['ID'] .= $this->get_text_until_matching_closer_tag();
 				$this->last_comment_id = $this->object_data['ID'];
 				break;
 			case 'wp:comment_author':
@@ -389,98 +451,117 @@ class WP_WXR_Processor {
 			case 'wp:comment_user_id':
 			case 'wp:comment_approved':
 				$key = substr($this->xml->get_tag(), strlen('wp:comment_'));
-				$this->object_data[$key] = $this->get_text_until_matching_closer_tag();
+				$this->object_data[$key] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:commentmeta':
 				$this->object_finished = true;
 				break;
 			default:
-				throw new \Exception( 'Unexpected tag inside comment: ' . $this->xml->get_tag() );
+				throw new \Exception( 'Unexpected tag inside comment: ' . $closest_tag );
 				break;
 		}
 		return true;
 	}
 
 	protected function step_in_user() {
-		switch ( $this->xml->get_tag() ) {
+		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		switch ( $closest_tag ) {
+			case 'wp:author':
+			case 'wp:wp_author':
+				// Ignore the opener.
+				break;
 			case 'wp:author_id':
-				$this->object_data['ID'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['ID'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:author_login':
-				$this->object_data['user_login'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['user_login'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:author_email':
-				$this->object_data['user_email'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['user_email'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:author_display_name':
-				$this->object_data['display_name'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['display_name'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:author_first_name':
-				$this->object_data['first_name'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['first_name'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:author_last_name':
-				$this->object_data['last_name'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['last_name'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			default:
-				throw new \Exception( 'Unexpected tag inside user: ' . $this->xml->get_tag() );
+				throw new \Exception( 'Unexpected tag inside user: ' . $closest_tag );
 				break;
 		}
 		return true;
 	}
 
 	protected function step_in_term() {
-		switch ( $this->xml->get_tag() ) {
+		$closest_tag = end( $this->xml->get_breadcrumbs() );
+		switch ( $closest_tag ) {
+			case 'wp:term':
+				// Ignore the opener.
+				break;
 			case 'wp:term_id':
-				$this->object_data['term_id'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['term_id'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:term_taxonomy':
-				$this->object_data['taxonomy'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['taxonomy'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:term_slug':
-				$this->object_data['slug'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['slug'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:term_parent':
-				$this->object_data['parent'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['parent'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:term_name':
-				$this->object_data['name'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['name'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			case 'wp:term_description':
-				$this->object_data['description'] = $this->get_text_until_matching_closer_tag();
+				$this->object_data['description'] .= $this->get_text_until_matching_closer_tag();
 				break;
 			default:
-				throw new \Exception( 'Unexpected tag inside term: ' . $this->xml->get_tag() );
+				throw new \Exception( 'Unexpected tag inside term: ' . $closest_tag );
 				break;
 		}
 		return true;
 	}
 
 	protected function get_text_until_matching_closer_tag() {
+		if($this->xml->is_empty_element()) {
+			return '';
+		}
+
 		$text            = '';
-		$encountered_tag = false;
-		while ( $this->xml->next_token() ) {
+		do {
 			switch ( $this->xml->get_token_type() ) {
 				case '#text':
 				case '#cdata-section':
 					$text .= $this->xml->get_modifiable_text();
 					break;
 				case '#tag':
-					if ( $this->xml->is_tag_closer() || $this->xml->is_empty_element() ) {
-						break 2;
-					} else {
-						$encountered_tag = true;
-						_doing_it_wrong( __METHOD__, 'Encountered a tag opener when collecting the text contents of another tag.', 'WP_VERSION' );
+					/**
+					 * @TODO: What to do if we get an XML tag where we only expect text?
+					 *        Note this clause will likely also kick in the first time the
+					 *        get_text_until_matching_closer_tag() method is called
+					 *        because we're likely pointed to the tag which we want to
+					 *        collect the text contents of.
+					 */
+
+					/**
+					 * Assume that any tag closer indicates the end of the text node.
+					 * This is a naive assumption. Let's revisit this if we find any
+					 * expected tags mixed with text.
+					 */
+					if($this->xml->is_tag_closer()) {
+						return $text;
 					}
+
 					break;
 				default:
 					throw new \Exception( 'Unknown token type: ' . $this->xml->get_token_type() );
 					break;
 			}
-		}
-
-		if ( $encountered_tag ) {
-			return false;
-		}
+		} while( $this->xml->next_token() );
 
 		return $text;
 	}

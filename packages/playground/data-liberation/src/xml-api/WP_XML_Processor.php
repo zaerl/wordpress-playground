@@ -2390,6 +2390,30 @@ class WP_XML_Processor {
 	}
 
 	/**
+	 * Indicates if the current tag token is a tag opener.
+	 *
+	 * Example:
+	 *
+	 *     $p = new WP_XML_Processor( '<wp:content></wp:content>' );
+	 *     $p->next_token();
+	 *     $p->is_tag_opener() === true;
+	 *
+	 *     $p->next_token();
+	 *     $p->is_tag_opener() === false;
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @return bool Whether the current tag is a tag closer.
+	 */
+	public function is_tag_opener() {
+		return (
+			self::STATE_MATCHED_TAG === $this->parser_state &&
+			! $this->is_closing_tag &&
+			! $this->is_empty_element()
+		);
+	}
+
+	/**
 	 * Indicates the kind of matched token, if any.
 	 *
 	 * This differs from `get_token_name()` in that it always
