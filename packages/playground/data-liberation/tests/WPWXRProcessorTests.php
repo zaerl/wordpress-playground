@@ -11,27 +11,27 @@ class WPWXRProcessorTests extends TestCase {
         $this->assertTrue( $importer->next_object() );
         $this->assertEquals(
             'site_option',
-            $importer->get_current_object_type()
+            $importer->get_object_type()
         );
         $this->assertEquals(
             [
                 'option_name' => 'blogname',
                 'option_value' => 'My WordPress Website',
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
 
         $this->assertTrue( $importer->next_object() );
         $this->assertEquals(
             'site_option',
-            $importer->get_current_object_type()
+            $importer->get_object_type()
         );
         $this->assertEquals(
             [
                 'option_name' => 'siteurl',
                 'option_value' => 'https://playground.internal/path',
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
 
         $this->assertTrue( $importer->next_object() );
@@ -40,7 +40,7 @@ class WPWXRProcessorTests extends TestCase {
                 'option_name' => 'home',
                 'option_value' => 'https://playground.internal/path',
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
 
         $this->assertTrue( $importer->next_object() );
@@ -53,7 +53,7 @@ class WPWXRProcessorTests extends TestCase {
                 'last_name' => '',
                 'ID' => 1
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
         
         $this->assertTrue( $importer->next_object() );
@@ -94,7 +94,7 @@ https://playground.internal/path-not-taken was the second best choice.
                     'category' => ['Uncategorized']
                 ],
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
 
         $this->assertTrue( $importer->next_object() );
@@ -103,7 +103,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'meta_key' => '_pingme',
                 'meta_value' => '1',
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
 
         $this->assertTrue( $importer->next_object() );
@@ -112,7 +112,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'meta_key' => '_encloseme',
                 'meta_value' => '1',
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
 
         $this->assertFalse($importer->next_object());
@@ -159,7 +159,7 @@ https://playground.internal/path-not-taken was the second best choice.
         $this->assertTrue( $importer->next_object() );
         $this->assertEquals(
             'post',
-            $importer->get_current_object_type()
+            $importer->get_object_type()
         );
         $this->assertEquals(
             [
@@ -181,20 +181,20 @@ https://playground.internal/path-not-taken was the second best choice.
                 'post_content' => '',
                 'is_sticky' => '0',
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
 
         $this->assertTrue( $importer->next_object() );
         $this->assertEquals(
             'post_meta',
-            $importer->get_current_object_type()
+            $importer->get_object_type()
         );
         $this->assertEquals(
             [
                 'meta_key' => '_wc_attachment_source',
                 'meta_value' => 'https://raw.githubusercontent.com/wordpress/blueprints/stylish-press/blueprints/stylish-press/woo-product-images/vneck-tee-2.jpg',
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
     }
 
@@ -219,7 +219,7 @@ https://playground.internal/path-not-taken was the second best choice.
         $this->assertTrue( $importer->next_object() );
         $this->assertEquals(
             'term',
-            $importer->get_current_object_type()
+            $importer->get_object_type()
         );
         $this->assertEquals(
             [
@@ -229,7 +229,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'parent' => '',
                 'name' => 'fullscreen_slider',
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
     }
 
@@ -252,7 +252,7 @@ https://playground.internal/path-not-taken was the second best choice.
         $this->assertTrue( $importer->next_object() );
         $this->assertEquals(
             'category',
-            $importer->get_current_object_type()
+            $importer->get_object_type()
         );
         $this->assertEquals(
             [
@@ -260,7 +260,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'parent' => '',
                 'name' => 'Uncategorized',
             ],
-            $importer->get_current_object_data()
+            $importer->get_object_data()
         );
     }
 
@@ -284,7 +284,7 @@ https://playground.internal/path-not-taken was the second best choice.
         $this->assertTrue( $wxr->next_object() );
         $this->assertEquals(
             'tag',
-            $wxr->get_current_object_type()
+            $wxr->get_object_type()
         );
         $this->assertEquals(
             [
@@ -293,11 +293,11 @@ https://playground.internal/path-not-taken was the second best choice.
                 'name' => 'Articles',
                 'description' => 'Tags posts about Articles.',
             ],
-            $wxr->get_current_object_data()
+            $wxr->get_object_data()
         );
     }
 
-    public function test_comment() {
+    public function test_parse_comment() {
         $wxr = new WP_WXR_Processor(
             WP_XML_Processor::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
@@ -332,19 +332,19 @@ https://playground.internal/path-not-taken was the second best choice.
         $this->assertTrue( $wxr->next_object() );
         $this->assertEquals(
             'post',
-            $wxr->get_current_object_type()
+            $wxr->get_object_type()
         );
         $this->assertEquals(
             [
                 'post_title' => 'My post!',
             ],
-            $wxr->get_current_object_data()
+            $wxr->get_object_data()
         );
 
         $this->assertTrue( $wxr->next_object() );
         $this->assertEquals(
             'comment',
-            $wxr->get_current_object_type()
+            $wxr->get_object_type()
         );
         $this->assertEquals(
             [
@@ -359,23 +359,79 @@ https://playground.internal/path-not-taken was the second best choice.
                 'content' => 'Anonymous comment.',
                 'parent' => '0',
             ],
-            $wxr->get_current_object_data()
+            $wxr->get_object_data()
         );
 
         $this->assertTrue( $wxr->next_object() );
         $this->assertEquals(
             'comment_meta',
-            $wxr->get_current_object_type()
+            $wxr->get_object_type()
         );
         $this->assertEquals(
             [
                 'meta_key' => '_wp_karma',
                 'meta_value' => '1',
             ],
-            $wxr->get_current_object_data()
+            $wxr->get_object_data()
         );
 
         $this->assertFalse( $wxr->next_object() );
+    }
+
+    public function test_retains_last_ids() {
+        $wxr = new WP_WXR_Processor(
+            WP_XML_Processor::from_string(<<<XML
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss>
+                <channel>
+                    <item>
+                        <title>My post!</title>
+                        <wp:post_id>10</wp:post_id>
+                        <wp:post_parent>0</wp:post_parent>
+                        <wp:comment>
+                            <wp:comment_id>167</wp:comment_id>
+                            <wp:comment_user_id>0</wp:comment_user_id>
+                        </wp:comment>
+                        <wp:comment>
+                            <wp:comment_id>168</wp:comment_id>
+                            <wp:comment_user_id>0</wp:comment_user_id>
+                        </wp:comment>
+                    </item>
+                    <item>
+                        <wp:post_id>11</wp:post_id>
+                        <wp:post_parent>0</wp:post_parent>
+                        <wp:comment>
+                            <wp:comment_id>169</wp:comment_id>
+                            <wp:comment_user_id>0</wp:comment_user_id>
+                        </wp:comment>
+                    </item>
+                </channel>
+            </rss>
+            XML
+            )
+        );
+        $this->assertTrue( $wxr->next_object() );
+        $this->assertEquals('post', $wxr->get_object_type());
+        $this->assertEquals( 10, $wxr->get_last_post_id() );
+
+        $this->assertTrue( $wxr->next_object() );
+        $this->assertEquals('comment', $wxr->get_object_type());
+        $this->assertEquals( 10, $wxr->get_last_post_id() );
+        $this->assertEquals( 167, $wxr->get_last_comment_id() );
+
+        $this->assertTrue( $wxr->next_object() );
+        $this->assertEquals('comment', $wxr->get_object_type());
+        $this->assertEquals( 10, $wxr->get_last_post_id() );
+        $this->assertEquals( 168, $wxr->get_last_comment_id() );
+
+        $this->assertTrue( $wxr->next_object() );
+        $this->assertEquals('post', $wxr->get_object_type());
+        $this->assertEquals( 11, $wxr->get_last_post_id() );
+
+        $this->assertTrue( $wxr->next_object() );
+        $this->assertEquals('comment', $wxr->get_object_type());
+        $this->assertEquals( 11, $wxr->get_last_post_id() );
+        $this->assertEquals( 169, $wxr->get_last_comment_id() );
     }
 
 }
