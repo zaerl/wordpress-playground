@@ -185,6 +185,7 @@ class WP_WXR_Processor {
 					$this->object_finished = true;
 					return true;
 				case 'wp:author':
+				case 'wp:wp_author':
 					$this->object_type = 'user';
                     $this->object_depth = $this->xml->get_current_depth();
 					return true;

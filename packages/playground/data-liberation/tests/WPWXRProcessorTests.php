@@ -4,6 +4,31 @@ use PHPUnit\Framework\TestCase;
 
 class WPWXRProcessorTests extends TestCase {
     
+    /**
+     * @dataProvider preexisting_wxr_files_provider
+     */
+    public function test_does_not_crash_when_parsing_preexisting_wxr_files($path, $expected_objects) {
+        $wxr = new WP_WXR_Processor(
+            WP_XML_Processor::from_string(file_get_contents($path))
+        );
+
+        $found_objects = 0;
+        while( $wxr->next_object() ) {
+            ++$found_objects;
+        }
+
+        $this->assertEquals($expected_objects, $found_objects);
+    }
+
+    public function preexisting_wxr_files_provider() {
+        return [
+            [__DIR__ . '/fixtures/a11y-unit-test-data.xml', 1043],
+            [__DIR__ . '/fixtures/theme-unit-test-data.xml', 1146],
+            [__DIR__ . '/fixtures/woocommerce-demo-products.xml', 975],
+        ];
+    }
+
+
     public function test_simple_wxr() {
         $importer = new WP_WXR_Processor(
             WP_XML_Processor::from_string(file_get_contents(__DIR__ . '/fixtures/wxr-simple.xml'))
