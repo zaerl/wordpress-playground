@@ -22,9 +22,20 @@ class WPWXRProcessorTests extends TestCase {
 
     public function preexisting_wxr_files_provider() {
         return [
-            [__DIR__ . '/fixtures/a11y-unit-test-data.xml', 1043],
-            [__DIR__ . '/fixtures/theme-unit-test-data.xml', 1146],
-            [__DIR__ . '/fixtures/woocommerce-demo-products.xml', 975],
+            [__DIR__ . '/wxr/a11y-unit-test-data.xml', 1043],
+            [__DIR__ . '/wxr/crazy-cdata-escaped.xml', 5],
+            [__DIR__ . '/wxr/crazy-cdata.xml', 5],
+            [__DIR__ . '/wxr/invalid-version-tag.xml', 57],
+            [__DIR__ . '/wxr/missing-version-tag.xml', 57],
+            [__DIR__ . '/wxr/slashes.xml', 9],
+            [__DIR__ . '/wxr/small-export.xml', 68],
+            [__DIR__ . '/wxr/test-serialized-postmeta-no-cdata.xml', 5],
+            [__DIR__ . '/wxr/test-serialized-postmeta-with-cdata.xml', 7],
+            [__DIR__ . '/wxr/test-utw-post-meta-import.xml', 5],
+            [__DIR__ . '/wxr/theme-unit-test-data.xml', 1146],
+            [__DIR__ . '/wxr/valid-wxr-1.0.xml', 32],
+            [__DIR__ . '/wxr/valid-wxr-1.1.xml', 11],
+            [__DIR__ . '/wxr/woocommerce-demo-products.xml', 975],
         ];
     }
 
