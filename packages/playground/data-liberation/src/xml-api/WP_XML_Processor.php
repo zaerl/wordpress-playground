@@ -1893,8 +1893,9 @@ class WP_XML_Processor {
 			/**
 			 * Parse the next unicode codepoint.
 			 *
-			 * The use of a custom UTF-8 decoder is necessary because no other method
-			 * can be reliably used in all WordPress installations:
+			 * We use a custom UTF-8 decoder here. No other method
+			 * is reliable and available enough to depend on it in
+			 * WordPress core:
 			 *
 			 * * mb_ord() – is not available on all hosts.
 			 * * iconv_substr() – is not available on all hosts.
@@ -1906,8 +1907,10 @@ class WP_XML_Processor {
 			 *                  how to reliably reproduce this failure mode in a
 			 *                  unit test.
 			 *
-			 * Performance-wise, this is much faster than relying on preg_match(),
-			 * but it's likely slower than using the mbstring extension. @TODO: Evaluate.
+			 * Performance-wise, character-by-character processing via utf8_codepoint_at
+			 * is still much faster than relying on preg_match(). The mbstring extension
+			 * is likely faster. It would be interesting to evaluate the performance
+			 * and prefer mbstring whenever it's available.
 			 */
 			$codepoint = utf8_codepoint_at(
 				$this->xml,
