@@ -769,10 +769,10 @@ class WP_XML_Processor {
 		}
 
 		// Periodically flush the processed bytes to avoid high memory usage.
-		if(
+		if (
 			null !== $this->memory_budget &&
-			strlen($this->xml) > $this->memory_budget
-		){
+			strlen( $this->xml ) > $this->memory_budget
+		) {
 			$this->flush_processed_xml();
 		}
 		return true;
@@ -793,24 +793,24 @@ class WP_XML_Processor {
 		$this->get_updated_xml();
 
 		$unreferenced_bytes = $this->bytes_already_parsed;
-		if(null !== $this->token_starts_at) {
+		if ( null !== $this->token_starts_at ) {
 			$unreferenced_bytes = min( $unreferenced_bytes, $this->token_starts_at );
 		}
 
-		$flushed_bytes = substr( $this->xml, 0, $unreferenced_bytes );
-		$this->xml = substr( $this->xml, $unreferenced_bytes );
-		$this->bookmarks            = array();
-		$this->lexical_updates      = array();
-		$this->seek_count           = 0;
-		$this->had_previous_chunks  = true;
+		$flushed_bytes               = substr( $this->xml, 0, $unreferenced_bytes );
+		$this->xml                   = substr( $this->xml, $unreferenced_bytes );
+		$this->bookmarks             = array();
+		$this->lexical_updates       = array();
+		$this->seek_count            = 0;
+		$this->had_previous_chunks   = true;
 		$this->bytes_already_parsed -= $unreferenced_bytes;
-		if(null !== $this->token_starts_at) {
+		if ( null !== $this->token_starts_at ) {
 			$this->token_starts_at -= $unreferenced_bytes;
 		}
-		if(null !== $this->tag_name_starts_at) {
+		if ( null !== $this->tag_name_starts_at ) {
 			$this->tag_name_starts_at -= $unreferenced_bytes;
 		}
-		if(null !== $this->text_starts_at) {
+		if ( null !== $this->text_starts_at ) {
 			$this->text_starts_at -= $unreferenced_bytes;
 		}
 		return $flushed_bytes;
@@ -926,6 +926,7 @@ class WP_XML_Processor {
 			_doing_it_wrong(
 				__METHOD__,
 				sprintf(
+					// translators: %d is the byte offset of the invalid closing tag.
 					__( 'Invalid closing tag encountered at index %d.' ),
 					$this->bytes_already_parsed
 				),
@@ -3066,6 +3067,7 @@ class WP_XML_Processor {
 						_doing_it_wrong(
 							__METHOD__,
 							sprintf(
+								// translators: %1$s is the name of the closing HTML tag, %2$s is the name of the opening HTML tag.
 								__( 'The closing tag "%1$s" did not match the opening tag "%2$s".' ),
 								$tag_name,
 								$popped
