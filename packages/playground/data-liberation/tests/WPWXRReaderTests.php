@@ -308,9 +308,10 @@ https://playground.internal/path-not-taken was the second best choice.
         );
         $this->assertEquals(
             [
-                'nicename' => 'uncategorized',
+                'slug' => 'uncategorized',
                 'parent' => '',
                 'name' => 'Uncategorized',
+                'taxonomy' => 'category',
             ],
             $importer->get_entity_data()
         );
@@ -343,6 +344,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'slug' => 'articles',
                 'name' => 'Articles',
                 'description' => 'Tags posts about Articles.',
+                'taxonomy' => 'post_tag',
             ],
             $wxr->get_entity_data()
         );
@@ -389,6 +391,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'slug' => 'articles',
                 'name' => 'Articles for everyone',
                 'description' => 'Tags posts about Articles.',
+                'taxonomy' => 'post_tag',
             ],
             $wxr->get_entity_data()
         );

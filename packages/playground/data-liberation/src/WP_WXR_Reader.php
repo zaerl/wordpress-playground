@@ -33,7 +33,7 @@ class WP_WXR_Reader {
 		'wp:comment' => array(
 			'type' => 'comment',
 			'fields' => array(
-				'wp:comment_id' => 'ID',
+				'wp:comment_id' => 'comment_id',
 				'wp:comment_author' => 'comment_author',
 				'wp:comment_author_email' => 'comment_author_email',
 				'wp:comment_author_url' => 'comment_author_url',
@@ -122,9 +122,10 @@ class WP_WXR_Reader {
 		'wp:category' => array(
 			'type' => 'category',
 			'fields' => array(
-				'wp:category_nicename' => 'nicename',
+				'wp:category_nicename' => 'slug',
 				'wp:category_parent' => 'parent',
 				'wp:cat_name' => 'name',
+				'wp:category_description' => 'description',
 			),
 		),
 	);
@@ -282,7 +283,7 @@ class WP_WXR_Reader {
 							$this->emit_entity();
 							return true;
 					}
-				} elseif ( $this->entity_type === 'post' ) {
+				} else if ( $this->entity_type === 'post' ) {
 					if ( $tag === 'category' ) {
 						$term_name = $this->last_opener_attributes['domain'];
 						if ( empty( $this->entity_data['terms'][ $term_name ] ) ) {
@@ -291,6 +292,10 @@ class WP_WXR_Reader {
 						$this->entity_data['terms'][ $term_name ][] = $this->text_buffer;
 						continue;
 					}
+				} else if ( $this->entity_type === 'tag' ) {
+					$this->entity_data['taxonomy'] = 'post_tag';
+				} else if ( $this->entity_type === 'category' ) {
+					$this->entity_data['taxonomy'] = 'category';
 				}
 
 				if ( ! isset( static::KNOWN_ENITIES[ $this->entity_tag ]['fields'][ $tag ] ) ) {
