@@ -147,7 +147,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'post_password' => '',
                 'is_sticky' => '0',
                 'terms' => [
-                    'category' => ['Uncategorized']
+                    [ 'taxonomy' => 'category', 'slug' => 'uncategorized', 'description' => 'Uncategorized' ],
                 ],
             ],
             $importer->get_entity_data()
@@ -446,7 +446,7 @@ https://playground.internal/path-not-taken was the second best choice.
         );
         $this->assertEquals(
             [
-                'ID' => '167',
+                'comment_id' => '167',
                 'comment_approved' => '1',
                 'comment_author' => 'Anon',
                 'comment_author_email' => 'anon@example.com',

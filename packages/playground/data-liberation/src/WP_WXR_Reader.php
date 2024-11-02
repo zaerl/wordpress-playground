@@ -1,34 +1,145 @@
 <?php
 /**
- * @TODO:
- * – Should this extend WP_XML_Processor? Or should it keep track of its own paused
- *   state independently of the underlying WP_XML_Processor? Would anything change
- *   if the XML processor was receiving data from a HTTP -> unzip stream?
- * - Ensure we can pause in the middle of an item node, crash, and then resume later
- *   on. This would require setting bookmarks before/after each major parsed entity.
- * - Decide: Should rewriting site URLs be done here? Or should it be done later on
- *   in an importer-agnostic way that we could also apply to markdown files, site
- *   transfers etc.? Fetching assets should not happen in this class for sure.
- * - Explicitly define and test failure modes. Provide useful error messages with clear
- *   instructions on how to fix the problem.
+ * XML API: WP_WXR_Reader class
+ *
+ * Reads WordPress eXtended RSS (WXR) files and emits entities like posts,
+ * comments, users, and terms as they are encountered in the file. This
+ * allows for streaming processing of large WXR files without loading the
+ * entire file into memory at once.
+ *
+ * Example:
+ *
+ *     $reader = WP_WXR_Reader::from_string( $wxr_file );
+ *     while ( $reader->next_entity() ) {
+ *         $type = $reader->get_entity_type();
+ *         $data = $reader->get_entity_data();
+ *
+ *         switch ( $type ) {
+ *             case 'post':
+ *                 // Process post data...
+ *                 break;
+ *
+ *             case 'comment':
+ *                 // Process comment data...
+ *                 break;
+ *
+ *             case 'user':
+ *                 // Process user data...
+ *                 break;
+ *         }
+ *     }
+ *
+ * The reader supports streaming input, meaning it can process a WXR file
+ * as it's being downloaded or read from disk. This is particularly useful
+ * for large WXR files that would otherwise consume too much memory if loaded
+ * all at once.
+ *
+ * Example:
+ *
+ *     $reader = WP_WXR_Reader::from_stream();
+ *     
+ *     // Add data as it becomes available
+ *     $reader->append_bytes( fread( $file_handle, 8192 ) );
+ *     
+ *     // Process entities
+ *     while ( $reader->next_entity() ) {
+ *         // ...
+ *     }
+ *
+ *     // Check if we need more input
+ *     if ( $reader->is_paused_at_incomplete_input() ) {
+ *         // Add more data and continue processing
+ *         $reader->append_bytes( fread( $file_handle, 8192 ) );
+ *     }
+ *
+ * The reader maintains state about the last processed post and comment IDs
+ * to help importers maintain referential integrity when processing entities
+ * that reference other entities (like comments referencing posts).
+ *
+ * @since WP_VERSION
  */
 
 class WP_WXR_Reader {
 
 	/**
+	 * The XML processor used to parse the WXR file.
+	 *
+	 * @since WP_VERSION
 	 * @var WP_XML_Processor
 	 */
 	private $xml;
 
+	/**
+	 * The name of the XML tag containing information about the WordPress entity
+	 * currently being extracted from the WXR file.
+	 *
+	 * @since WP_VERSION
+	 * @var string|null
+	 */
 	private $entity_tag;
-	private $entity_type;
-	private $entity_data;
-	private $entity_finished        = false;
-	private $last_opener_attributes = array();
-	private $last_post_id           = null;
-	private $last_comment_id        = null;
-	private $text_buffer            = '';
 
+	/**
+	 * The name of the current WordPress entity, such as 'post' or 'comment'.
+	 *
+	 * @since WP_VERSION
+	 * @var string|null
+	 */
+	private $entity_type;
+
+	/**
+	 * The data accumulated for the current entity.
+	 *
+	 * @since WP_VERSION
+	 * @var array
+	 */
+	private $entity_data;
+
+	/**
+	 * Whether the current entity has been emitted.
+	 *
+	 * @since WP_VERSION
+	 * @var bool
+	 */
+	private $entity_finished = false;
+
+	/**
+	 * The attributes from the last opening tag.
+	 *
+	 * @since WP_VERSION
+	 * @var array
+	 */
+	private $last_opener_attributes = array();
+
+	/**
+	 * The ID of the last processed post.
+	 *
+	 * @since WP_VERSION
+	 * @var int|null
+	 */
+	private $last_post_id = null;
+
+	/**
+	 * The ID of the last processed comment.
+	 *
+	 * @since WP_VERSION
+	 * @var int|null
+	 */
+	private $last_comment_id = null;
+
+	/**
+	 * Buffer for accumulating text content between tags.
+	 *
+	 * @since WP_VERSION
+	 * @var string
+	 */
+	private $text_buffer = '';
+
+	/**
+	 * Mapping of WXR tags to their corresponding entity types and field mappings.
+	 *
+	 * @since WP_VERSION
+	 * @var array
+	 */
 	const KNOWN_ENITIES = array(
 		'wp:comment' => array(
 			'type' => 'comment',
@@ -130,18 +241,48 @@ class WP_WXR_Reader {
 		),
 	);
 
+	/**
+	 * Creates a new WXR reader from a string.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @param string $wxr_bytes The WXR content as a string.
+	 * @return WP_WXR_Reader The new reader instance.
+	 */
 	public static function from_string( $wxr_bytes = '' ) {
 		return new WP_WXR_Reader( WP_XML_Processor::from_string( $wxr_bytes ) );
 	}
 
+	/**
+	 * Creates a new WXR reader for streaming input.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @param string $wxr_bytes Optional initial WXR content.
+	 * @return WP_WXR_Reader The new reader instance.
+	 */
 	public static function from_stream( $wxr_bytes = '' ) {
 		return new WP_WXR_Reader( WP_XML_Processor::from_stream( $wxr_bytes ) );
 	}
 
-	protected function __construct( $xml ) {
+	/**
+	 * Constructor.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @param WP_XML_Processor $xml The XML processor to use.
+	 */
+	protected function __construct( $xml = '' ) {
 		$this->xml = $xml;
 	}
 
+	/**
+	 * Gets the type of the current entity.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @return string|false The entity type, or false if no entity is being processed.
+	 */
 	public function get_entity_type() {
 		if ( null !== $this->entity_type ) {
 			return $this->entity_type;
@@ -155,38 +296,99 @@ class WP_WXR_Reader {
 		return static::KNOWN_ENITIES[ $this->entity_tag ]['type'];
 	}
 
+	/**
+	 * Gets the data for the current entity.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @return array The entity data.
+	 */
 	public function get_entity_data() {
 		return $this->entity_data;
 	}
 
+	/**
+	 * Gets the ID of the last processed post.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @return int|null The post ID, or null if no posts have been processed.
+	 */
 	public function get_last_post_id() {
 		return $this->last_post_id;
 	}
 
+	/**
+	 * Gets the ID of the last processed comment.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @return int|null The comment ID, or null if no comments have been processed.
+	 */
 	public function get_last_comment_id() {
 		return $this->last_comment_id;
 	}
 
+	/**
+	 * Appends bytes to the input stream.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @param string $bytes The bytes to append.
+	 */
 	public function append_bytes( string $bytes ) {
 		$this->xml->append_bytes( $bytes );
 	}
 
+	/**
+	 * Marks the input as finished.
+	 *
+	 * @since WP_VERSION
+	 */
 	public function input_finished(): void {
 		$this->xml->input_finished();
 	}
 
+	/**
+	 * Checks if processing is finished.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @return bool Whether processing is finished.
+	 */
 	public function is_finished(): bool {
 		return $this->xml->is_finished();
 	}
 
+	/**
+	 * Checks if processing is paused waiting for more input.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @return bool Whether processing is paused.
+	 */
 	public function is_paused_at_incomplete_input(): bool {
 		return $this->xml->is_paused_at_incomplete_input();
 	}
 
+	/**
+	 * Gets the last error that occurred.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @return string|null The error message, or null if no error occurred.
+	 */
 	public function get_last_error(): ?string {
 		return $this->xml->get_last_error();
 	}
 
+	/**
+	 * Advances to the next entity in the WXR file.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @return bool Whether another entity was found.
+	 */
 	public function next_entity() {
 		if (
 			$this->xml->is_finished() ||
@@ -204,8 +406,13 @@ class WP_WXR_Reader {
 			}
 		}
 
+		/**
+		 * Main parsing loop. It advances the XML parser state until a full entity
+		 * is available. 
+		 */
 		do {
 			$breadcrumbs = $this->xml->get_breadcrumbs();
+			// Don't process anything outside the <rss> <channel> hierarchy.
 			if (
 				count( $breadcrumbs ) < 2 ||
 				$breadcrumbs[0] !== 'rss' ||
@@ -214,6 +421,12 @@ class WP_WXR_Reader {
 				continue;
 			}
 
+			/*
+			 * Buffer text and CDATA sections until we find the next tag.
+			 * Each tag may contain multiple text or CDATA sections so we can't
+			 * just assume that a single `get_modifiable_text()` call would get
+			 * the entire text content of an element.
+			 */
 			if (
 				$this->xml->get_token_type() === '#text' ||
 				$this->xml->get_token_type() === '#cdata-section'
@@ -222,90 +435,155 @@ class WP_WXR_Reader {
 				continue;
 			}
 
+			// We're only interested in tags after this point.
 			if ( $this->xml->get_token_type() !== '#tag' ) {
 				continue;
 			}
 
 			$tag = $this->xml->get_tag();
-			// The Accessibility WXR file uses a non-standard wp:wp_author tag.
+			/**
+			 * Custom adjustment: the Accessibility WXR file uses a non-standard
+			 * wp:wp_author tag.
+			 * @TODO: Should WP_WXR_Reader care about such non-standard tags when
+			 *        the regular WXR importer would ignore them? Perhaps a warning
+			 *        and an upstream PR would be a better solution.
+			 */
 			if ( $tag === 'wp:wp_author' ) {
 				$tag = 'wp:author';
 			}
+
+			/**
+			 * If the tag is a known entity root, assume the previous entity is
+			 * finished, emit it, and start processing the new entity the next
+			 * time this function is called.
+			 */
 			if ( array_key_exists( $tag, static::KNOWN_ENITIES ) ) {
 				if ( $this->entity_type && ! $this->entity_finished ) {
 					$this->emit_entity();
 					return true;
 				}
 				$this->after_entity();
+				// Only tag openers indicate a new entity. Closers just mean
+				// the previous entity is finished.
 				if ( $this->xml->is_tag_opener() ) {
 					$this->set_entity_tag( $tag );
 				}
 				continue;
 			}
 
+			/**
+			 * We're inside of an entity tag at this point.
+			 * 
+			 * The following code assumes that we'll only see three types of tags:
+			 * 
+			 * * Empty elements – such as <wp:comment_content />, that we'll ignore
+			 * * XML element openers with only text nodes inside them.
+			 * * XML element closers.
+			 *
+			 * Specifically, we don't expect to see any nested XML elements such as:
+			 * 
+			 *     <wp:comment_content>
+			 *         <title>Pygmalion</title>
+			 *         Long time ago...
+			 *     </wp:comment_content>
+			 * 
+			 * The semantics of such a structure is not clear. The WP_WXR_Reader will
+			 * enter an error state when it encounters such a structure.
+			 * 
+			 * Such nesting wasn't found in any WXR files analyzed when building
+			 * this class. If it actually is a part of the WXR standard, every
+			 * supported nested element will need a custom handler.
+			 */
+
+			/**
+			 * Buffer the XML tag opener attributes for later use.
+			 * 
+			 * In WXR files, entity attributes come from two sources:
+			 * * XML attributes on the tag itself
+			 * * Text content between the opening and closing tags
+			 * 
+			 * We store the XML attributes when encountering an opening tag,
+			 * but wait until the closing tag to process the entity attributes.
+			 * Why? Because only at that point we have both the attributes
+			 * and all the related text nodes.
+			 */
 			if ( $this->xml->is_tag_opener() ) {
 				$this->last_opener_attributes = array();
 				$names                        = $this->xml->get_attribute_names_with_prefix( '' );
 				foreach ( $names as $name ) {
 					$this->last_opener_attributes[ $name ] = $this->xml->get_attribute( $name );
 				}
-			} elseif ( $this->xml->is_tag_closer() ) {
-				/**
-				 * Only process site options when they are at the top level.
-				 */
-				if (
-					! $this->entity_finished &&
-					$this->xml->get_breadcrumbs() === array( 'rss', 'channel' )
-				) {
-					switch ( $tag ) {
-						case 'wp:base_blog_url':
-							$this->entity_type = 'site_option';
-							$this->entity_data = array(
-								'option_name' => 'home',
-								'option_value' => $this->text_buffer,
-							);
-							$this->emit_entity();
-							return true;
-						case 'wp:base_site_url':
-							$this->entity_type = 'site_option';
-							$this->entity_data = array(
-								'option_name' => 'siteurl',
-								'option_value' => $this->text_buffer,
-							);
-							$this->emit_entity();
-							return true;
-						case 'title':
-							$this->entity_type = 'site_option';
-							$this->entity_data = array(
-								'option_name' => 'blogname',
-								'option_value' => $this->text_buffer,
-							);
-							$this->emit_entity();
-							return true;
-					}
-				} else if ( $this->entity_type === 'post' ) {
-					if ( $tag === 'category' ) {
-						$term_name = $this->last_opener_attributes['domain'];
-						if ( empty( $this->entity_data['terms'][ $term_name ] ) ) {
-							$this->entity_data['terms'][ $term_name ] = array();
-						}
-						$this->entity_data['terms'][ $term_name ][] = $this->text_buffer;
-						continue;
-					}
-				} else if ( $this->entity_type === 'tag' ) {
-					$this->entity_data['taxonomy'] = 'post_tag';
-				} else if ( $this->entity_type === 'category' ) {
-					$this->entity_data['taxonomy'] = 'category';
-				}
+				$this->text_buffer = '';
+				continue;
+			}
 
-				if ( ! isset( static::KNOWN_ENITIES[ $this->entity_tag ]['fields'][ $tag ] ) ) {
-					// @TODO: Log this?
+			/**
+			 * At this point we're looking for the nearest tag closer so we can
+			 * turn the buffered data into an entity attribute.
+			 */
+			if ( ! $this->xml->is_tag_closer() ) {
+				continue;
+			}
+
+			if (
+				! $this->entity_finished &&
+				$this->xml->get_breadcrumbs() === array( 'rss', 'channel' )
+			) {
+				// Look for site options in children of the <channel> tag.
+				if ( $this->parse_site_option() ) {
+					return true;
+				} else {
+					// Keep looking for an entity if none was found in the current tag.
 					continue;
 				}
-
-				$key                       = static::KNOWN_ENITIES[ $this->entity_tag ]['fields'][ $tag ];
-				$this->entity_data[ $key ] = $this->text_buffer;
 			}
+			
+			/**
+			 * Special handling to accumulate categories stored inside the <category>
+			 * tag found inside <item> tags.
+			 * 
+			 * For example, we want to convert this:
+			 * 
+			 *     <category><![CDATA[Uncategorized]]></category>
+			 *     <category domain="category" nicename="wordpress">
+			 *	       <![CDATA[WordPress]]>
+			 *     </category>
+			 * 
+			 * Into this:
+			 * 
+			 *     'terms' => [
+			 *         [ 'taxonomy' => 'category', 'slug' => '', 'description' => 'Uncategorized' ],
+			 *         [ 'taxonomy' => 'category', 'slug' => 'wordpress', 'description' => 'WordPress' ],
+			 *     ]
+			 */
+			if (
+				$this->entity_type === 'post' &&
+				$tag === 'category'
+			) {
+				$this->entity_data['terms'][] = [
+					'taxonomy' => $this->last_opener_attributes['domain'],
+					'slug' => $this->last_opener_attributes['nicename'],
+					'description' => $this->text_buffer,
+				];
+				$this->text_buffer = '';
+				continue;
+			}
+
+			/**
+			 * Store the text content of known tags as the value of the corresponding
+			 * entity attribute as defined by the KNOWN_ENITIES mapping.
+			 * 
+			 * Ignores tags unlisted in the KNOWN_ENITIES mapping.
+			 * 
+			 * The WXR format is extensible so this reader could potentially
+			 * support registering custom handlers for unknown tags in the future.
+			 */
+			if ( ! isset( static::KNOWN_ENITIES[ $this->entity_tag ]['fields'][ $tag ] ) ) {
+				continue;
+			}
+
+			$key                       = static::KNOWN_ENITIES[ $this->entity_tag ]['fields'][ $tag ];
+			$this->entity_data[ $key ] = $this->text_buffer;
 			$this->text_buffer = '';
 		} while ( $this->xml->next_token() );
 
@@ -327,15 +605,57 @@ class WP_WXR_Reader {
 		return false;
 	}
 
+	/**
+	 * Emits a site option entity from known children of the <channel>
+	 * tag, e.g. <wp:base_blog_url> or <title>.
+	 * 
+	 * @return bool Whether a site_option entity was emitted.
+	 */
+	private function parse_site_option() {
+		$known_options = array(
+			'wp:base_blog_url' => 'home',
+			'wp:base_site_url' => 'siteurl',
+			'title' => 'blogname',
+		);
+
+		if(!array_key_exists($this->xml->get_tag(), $known_options)) {
+			return false;
+		}
+
+		$this->entity_type = 'site_option';
+		$this->entity_data = array(
+			'option_name' => $known_options[ $this->xml->get_tag() ],
+			'option_value' => $this->text_buffer,
+		);
+		$this->emit_entity();
+		return true;
+	}
+
+	/**
+	 * Marks the current entity as emitted and updates tracking variables.
+	 *
+	 * @since WP_VERSION
+	 */
 	private function emit_entity() {
 		if ( $this->entity_type === 'post' ) {
 			$this->last_post_id = $this->entity_data['ID'];
 		} elseif ( $this->entity_type === 'comment' ) {
-			$this->last_comment_id = $this->entity_data['ID'];
+			$this->last_comment_id = $this->entity_data['comment_id'];
+		} else if ( $this->entity_type === 'tag' ) {
+			$this->entity_data['taxonomy'] = 'post_tag';
+		} else if ( $this->entity_type === 'category' ) {
+			$this->entity_data['taxonomy'] = 'category';
 		}
 		$this->entity_finished = true;
 	}
 
+	/**
+	 * Sets the current entity tag and type.
+	 *
+	 * @since WP_VERSION
+	 *
+	 * @param string $tag The entity tag name.
+	 */
 	private function set_entity_tag( string $tag ) {
 		$this->entity_tag = $tag;
 		if ( array_key_exists( $tag, static::KNOWN_ENITIES ) ) {
@@ -343,6 +663,11 @@ class WP_WXR_Reader {
 		}
 	}
 
+	/**
+	 * Resets the state after processing an entity.
+	 *
+	 * @since WP_VERSION
+	 */
 	private function after_entity() {
 		$this->entity_tag             = null;
 		$this->entity_type            = null;
