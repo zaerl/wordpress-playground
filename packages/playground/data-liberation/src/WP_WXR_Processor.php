@@ -29,7 +29,7 @@ class WP_WXR_Processor {
 	private $last_comment_id = null;
 	private $text_buffer     = '';
 
-	const SCHEMA = array(
+	const KNOWN_ENITIES = array(
 		'wp:comment' => array(
 			'type' => 'comment',
 			'fields' => array(
@@ -148,10 +148,10 @@ class WP_WXR_Processor {
 		if ( null === $this->entity_tag ) {
 			return false;
 		}
-		if ( ! array_key_exists( $this->entity_tag, static::SCHEMA ) ) {
+		if ( ! array_key_exists( $this->entity_tag, static::KNOWN_ENITIES ) ) {
 			return false;
 		}
-		return static::SCHEMA[ $this->entity_tag ]['type'];
+		return static::KNOWN_ENITIES[ $this->entity_tag ]['type'];
 	}
 
 	public function get_entity_data() {
@@ -230,18 +230,9 @@ class WP_WXR_Processor {
 			if($tag === 'wp:wp_author') {
 				$tag = 'wp:author';
 			}
-			$is_entity_tag = array_key_exists( $tag, static::SCHEMA );
-			if ( $is_entity_tag ) {
-				if (
-					$this->entity_type &&
-					! $this->entity_finished
-				) {
-					if ( $this->entity_type === 'post' ) {
-						$this->last_post_id = $this->entity_data['ID'];
-					} elseif ( $this->entity_type === 'comment' ) {
-						$this->last_comment_id = $this->entity_data['ID'];
-					}
-					$this->entity_finished = true;
+			if ( array_key_exists( $tag, static::KNOWN_ENITIES ) ) {
+				if ( $this->entity_type && ! $this->entity_finished ) {
+					$this->emit_entity();
 					return true;
 				}
 				$this->after_entity();
@@ -272,7 +263,7 @@ class WP_WXR_Processor {
 								'option_name' => 'home',
 								'option_value' => $this->text_buffer,
 							);
-							$this->entity_finished = true;
+							$this->emit_entity();
 							return true;
 						case 'wp:base_site_url':
 							$this->entity_type = 'site_option';
@@ -280,7 +271,7 @@ class WP_WXR_Processor {
 								'option_name' => 'siteurl',
 								'option_value' => $this->text_buffer,
 							);
-							$this->entity_finished = true;
+							$this->emit_entity();
 							return true;
 						case 'title':
 							$this->entity_type = 'site_option';
@@ -288,7 +279,7 @@ class WP_WXR_Processor {
 								'option_name' => 'blogname',
 								'option_value' => $this->text_buffer,
 							);
-							$this->entity_finished = true;
+							$this->emit_entity();
 							return true;
 					}
 				} else if($this->entity_type === 'post') {
@@ -302,12 +293,12 @@ class WP_WXR_Processor {
 					}
 				}
 
-				if(!isset(static::SCHEMA[ $this->entity_tag ]['fields'][ $tag ])) {
+				if(!isset(static::KNOWN_ENITIES[ $this->entity_tag ]['fields'][ $tag ])) {
 					// @TODO: Log this?
 					continue;
 				}
 
-				$key                       = static::SCHEMA[ $this->entity_tag ]['fields'][ $tag ];
+				$key                       = static::KNOWN_ENITIES[ $this->entity_tag ]['fields'][ $tag ];
 				$this->entity_data[ $key ] = $this->text_buffer;
 			}
 			$this->text_buffer = '';
@@ -325,17 +316,26 @@ class WP_WXR_Processor {
 			$this->entity_type && 
 			! $this->entity_finished 
 		) {
-			$this->entity_finished = true;
+			$this->emit_entity();
 			return true;
 		}
 
 		return false;
 	}
 
+	private function emit_entity() {
+		if ( $this->entity_type === 'post' ) {
+			$this->last_post_id = $this->entity_data['ID'];
+		} elseif ( $this->entity_type === 'comment' ) {
+			$this->last_comment_id = $this->entity_data['ID'];
+		}
+		$this->entity_finished = true;
+	}
+
 	private function set_entity_tag(string $tag) {
 		$this->entity_tag = $tag;
-		if(array_key_exists($tag, static::SCHEMA)) {
-			$this->entity_type = static::SCHEMA[ $tag ]['type'];
+		if(array_key_exists($tag, static::KNOWN_ENITIES)) {
+			$this->entity_type = static::KNOWN_ENITIES[ $tag ]['type'];
 		}
 	}
 
