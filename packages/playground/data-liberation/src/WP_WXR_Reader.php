@@ -397,8 +397,16 @@ class WP_WXR_Reader {
 			return false;
 		}
 
+		/**
+		 * This is the first call after emitting an entity.
+		 * Remove the previous entity details from the internal state
+		 * and prepare for the next entity.
+		 */
 		if ( $this->entity_type && $this->entity_finished ) {
 			$this->after_entity();
+			// If we finished processing the entity on a closing tag, advance the XML processor to
+			// the next token. Otherwise the array_key_exists( $tag, static::KNOWN_ENITIES ) branch
+			// below will cause an infinite loop.
 			if ( $this->xml->is_tag_closer() ) {
 				if ( false === $this->xml->next_token() ) {
 					return false;

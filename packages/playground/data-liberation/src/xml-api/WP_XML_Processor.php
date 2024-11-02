@@ -574,6 +574,17 @@ class WP_XML_Processor {
 	protected $lexical_updates = array();
 
 	/**
+	 * Memory budget for the processed XML.
+	 *
+	 * append_bytes() will flush the processed bytes whenever the XML buffer
+	 * exceeds this budget. The lexical updates will be applied and the bookmarks
+	 * will be reset.
+	 *
+	 * @var int
+	 */
+	protected $memory_budget = 1024 * 1024 * 1024;
+
+	/**
 	 * Tracks and limits `seek()` calls to prevent accidental infinite loops.
 	 *
 	 * @since WP_VERSION
@@ -675,6 +686,8 @@ class WP_XML_Processor {
 
 	public static function create_stream_processor( $node_visitor_callback ) {
 		$xml_processor = WP_XML_Processor::from_stream( '' );
+		// Don't auto-flush the processed bytes. We'll do that manually.
+		$xml_processor->memory_budget = null;
 		return new ProcessorByteStream(
 			$xml_processor,
 			function ( $state ) use ( $xml_processor, $node_visitor_callback ) {
@@ -754,6 +767,14 @@ class WP_XML_Processor {
 		if ( $this->parser_state === self::STATE_INCOMPLETE_INPUT ) {
 			$this->parser_state = self::STATE_READY;
 		}
+
+		// Periodically flush the processed bytes to avoid high memory usage.
+		if(
+			null !== $this->memory_budget &&
+			strlen($this->xml) > $this->memory_budget
+		){
+			$this->flush_processed_xml();
+		}
 		return true;
 	}
 
@@ -771,20 +792,28 @@ class WP_XML_Processor {
 		// Flush updates
 		$this->get_updated_xml();
 
-		$processed_xml   = substr( $this->xml, 0, $this->bytes_already_parsed );
-		$unprocessed_xml = substr( $this->xml, $this->bytes_already_parsed );
+		$unreferenced_bytes = $this->bytes_already_parsed;
+		if(null !== $this->token_starts_at) {
+			$unreferenced_bytes = min( $unreferenced_bytes, $this->token_starts_at );
+		}
 
-		$breadcrumbs    = $this->get_breadcrumbs();
-		$parser_context = $this->parser_context;
-
-		$this->reset_state();
-
-		$this->xml                    = $unprocessed_xml;
-		$this->stack_of_open_elements = $breadcrumbs;
-		$this->parser_context         = $parser_context;
-		$this->had_previous_chunks    = true;
-
-		return $processed_xml;
+		$flushed_bytes = substr( $this->xml, 0, $unreferenced_bytes );
+		$this->xml = substr( $this->xml, $unreferenced_bytes );
+		$this->bookmarks            = array();
+		$this->lexical_updates      = array();
+		$this->seek_count           = 0;
+		$this->had_previous_chunks  = true;
+		$this->bytes_already_parsed -= $unreferenced_bytes;
+		if(null !== $this->token_starts_at) {
+			$this->token_starts_at -= $unreferenced_bytes;
+		}
+		if(null !== $this->tag_name_starts_at) {
+			$this->tag_name_starts_at -= $unreferenced_bytes;
+		}
+		if(null !== $this->text_starts_at) {
+			$this->text_starts_at -= $unreferenced_bytes;
+		}
+		return $flushed_bytes;
 	}
 
 	/**
@@ -2039,25 +2068,6 @@ class WP_XML_Processor {
 		$this->text_length        = null;
 		$this->is_closing_tag     = null;
 		$this->attributes         = array();
-	}
-
-	protected function reset_state() {
-		$this->xml                  = '';
-		$this->parser_state         = self::STATE_READY;
-		$this->bytes_already_parsed = 0;
-		$this->token_starts_at      = null;
-		$this->token_length         = null;
-		$this->tag_name_starts_at   = null;
-		$this->tag_name_length      = null;
-		$this->text_starts_at       = null;
-		$this->text_length          = null;
-		$this->is_closing_tag       = null;
-		$this->last_error           = null;
-		$this->attributes           = array();
-		$this->bookmarks            = array();
-		$this->lexical_updates      = array();
-		$this->seek_count           = 0;
-		$this->had_previous_chunks  = false;
 	}
 
 	/**

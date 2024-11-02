@@ -56,6 +56,7 @@ class WPWXRReaderTests extends TestCase {
             [__DIR__ . '/wxr/valid-wxr-1.0.xml', 32],
             [__DIR__ . '/wxr/valid-wxr-1.1.xml', 11],
             [__DIR__ . '/wxr/woocommerce-demo-products.xml', 975],
+            [__DIR__ . '/wxr/10MB.xml', 16442],
         ];
     }
 
