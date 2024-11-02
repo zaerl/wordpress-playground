@@ -23,11 +23,11 @@ class WP_WXR_Processor {
 	private $entity_tag;
 	private $entity_type;
 	private $entity_data;
-	private $entity_finished = false;
-	private $last_opener_attributes = [];
-	private $last_post_id    = null;
-	private $last_comment_id = null;
-	private $text_buffer     = '';
+	private $entity_finished        = false;
+	private $last_opener_attributes = array();
+	private $last_post_id           = null;
+	private $last_comment_id        = null;
+	private $text_buffer            = '';
 
 	const KNOWN_ENITIES = array(
 		'wp:comment' => array(
@@ -142,7 +142,7 @@ class WP_WXR_Processor {
 	}
 
 	public function get_entity_type() {
-		if(null !== $this->entity_type) {
+		if ( null !== $this->entity_type ) {
 			return $this->entity_type;
 		}
 		if ( null === $this->entity_tag ) {
@@ -196,8 +196,8 @@ class WP_WXR_Processor {
 
 		if ( $this->entity_type && $this->entity_finished ) {
 			$this->after_entity();
-			if($this->xml->is_tag_closer()) {
-				if(false === $this->xml->next_token()) {
+			if ( $this->xml->is_tag_closer() ) {
+				if ( false === $this->xml->next_token() ) {
 					return false;
 				}
 			}
@@ -221,13 +221,13 @@ class WP_WXR_Processor {
 				continue;
 			}
 
-			if($this->xml->get_token_type() !== '#tag') {
+			if ( $this->xml->get_token_type() !== '#tag' ) {
 				continue;
 			}
 
 			$tag = $this->xml->get_tag();
 			// The Accessibility WXR file uses a non-standard wp:wp_author tag.
-			if($tag === 'wp:wp_author') {
+			if ( $tag === 'wp:wp_author' ) {
 				$tag = 'wp:author';
 			}
 			if ( array_key_exists( $tag, static::KNOWN_ENITIES ) ) {
@@ -243,20 +243,20 @@ class WP_WXR_Processor {
 			}
 
 			if ( $this->xml->is_tag_opener() ) {
-				$this->last_opener_attributes = [];
-				$names = $this->xml->get_attribute_names_with_prefix('');
-				foreach($names as $name) {
-					$this->last_opener_attributes[$name] = $this->xml->get_attribute($name);
+				$this->last_opener_attributes = array();
+				$names                        = $this->xml->get_attribute_names_with_prefix( '' );
+				foreach ( $names as $name ) {
+					$this->last_opener_attributes[ $name ] = $this->xml->get_attribute( $name );
 				}
-			} else if ( $this->xml->is_tag_closer() ) {
+			} elseif ( $this->xml->is_tag_closer() ) {
 				/**
 				 * Only process site options when they are at the top level.
 				 */
-				if(
-					!$this->entity_finished &&
-					$this->xml->get_breadcrumbs() === ['rss', 'channel']
+				if (
+					! $this->entity_finished &&
+					$this->xml->get_breadcrumbs() === array( 'rss', 'channel' )
 				) {
-					switch($tag) {
+					switch ( $tag ) {
 						case 'wp:base_blog_url':
 							$this->entity_type = 'site_option';
 							$this->entity_data = array(
@@ -282,18 +282,18 @@ class WP_WXR_Processor {
 							$this->emit_entity();
 							return true;
 					}
-				} else if($this->entity_type === 'post') {
-					if($tag === 'category') {
+				} elseif ( $this->entity_type === 'post' ) {
+					if ( $tag === 'category' ) {
 						$term_name = $this->last_opener_attributes['domain'];
-						if(empty($this->entity_data['terms'][$term_name])) {
-							$this->entity_data['terms'][$term_name] = [];
+						if ( empty( $this->entity_data['terms'][ $term_name ] ) ) {
+							$this->entity_data['terms'][ $term_name ] = array();
 						}
-						$this->entity_data['terms'][$term_name][] = $this->text_buffer;
+						$this->entity_data['terms'][ $term_name ][] = $this->text_buffer;
 						continue;
 					}
 				}
 
-				if(!isset(static::KNOWN_ENITIES[ $this->entity_tag ]['fields'][ $tag ])) {
+				if ( ! isset( static::KNOWN_ENITIES[ $this->entity_tag ]['fields'][ $tag ] ) ) {
 					// @TODO: Log this?
 					continue;
 				}
@@ -304,17 +304,16 @@ class WP_WXR_Processor {
 			$this->text_buffer = '';
 		} while ( $this->xml->next_token() );
 
-		if($this->is_paused_at_incomplete_input()) {
+		if ( $this->is_paused_at_incomplete_input() ) {
 			return false;
 		}
 
 		/**
 		 * Emit the last unemitted entity after parsing all the data.
 		 */
-		if ( 
-			$this->is_finished() && 
-			$this->entity_type && 
-			! $this->entity_finished 
+		if ( $this->is_finished() &&
+			$this->entity_type &&
+			! $this->entity_finished
 		) {
 			$this->emit_entity();
 			return true;
@@ -332,19 +331,19 @@ class WP_WXR_Processor {
 		$this->entity_finished = true;
 	}
 
-	private function set_entity_tag(string $tag) {
+	private function set_entity_tag( string $tag ) {
 		$this->entity_tag = $tag;
-		if(array_key_exists($tag, static::KNOWN_ENITIES)) {
+		if ( array_key_exists( $tag, static::KNOWN_ENITIES ) ) {
 			$this->entity_type = static::KNOWN_ENITIES[ $tag ]['type'];
 		}
 	}
 
 	private function after_entity() {
-		$this->entity_tag      = null;
-		$this->entity_type     = null;
-		$this->entity_data     = array();
-		$this->entity_finished = false;
-		$this->text_buffer     = '';
-		$this->last_opener_attributes = [];
+		$this->entity_tag             = null;
+		$this->entity_type            = null;
+		$this->entity_data            = array();
+		$this->entity_finished        = false;
+		$this->text_buffer            = '';
+		$this->last_opener_attributes = array();
 	}
 }
