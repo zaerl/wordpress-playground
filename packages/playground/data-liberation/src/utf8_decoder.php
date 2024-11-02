@@ -1,4 +1,11 @@
 <?php
+/**
+ * UTF-8 decoding pipeline by Dennis Snell (@dmsnell), originally
+ * proposed in https://github.com/WordPress/wordpress-develop/pull/6883.
+ *
+ * It enables parsing XML documents with incomplete UTF-8 byte sequences
+ * without crashing or depending on the mbstring extension.
+ */
 
 if ( ! defined( 'UTF8_DECODER_ACCEPT' ) ) {
 	define( 'UTF8_DECODER_ACCEPT', 0 );
