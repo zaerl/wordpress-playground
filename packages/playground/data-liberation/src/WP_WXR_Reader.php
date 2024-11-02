@@ -13,7 +13,7 @@
  *   instructions on how to fix the problem.
  */
 
-class WP_WXR_Processor {
+class WP_WXR_Reader {
 
 	/**
 	 * @var WP_XML_Processor
@@ -130,11 +130,11 @@ class WP_WXR_Processor {
 	);
 
 	public static function from_string( $wxr_bytes = '' ) {
-		return new WP_WXR_Processor( WP_XML_Processor::from_string( $wxr_bytes ) );
+		return new WP_WXR_Reader( WP_XML_Processor::from_string( $wxr_bytes ) );
 	}
 
 	public static function from_stream( $wxr_bytes = '' ) {
-		return new WP_WXR_Processor( WP_XML_Processor::from_stream( $wxr_bytes ) );
+		return new WP_WXR_Reader( WP_XML_Processor::from_stream( $wxr_bytes ) );
 	}
 
 	protected function __construct( $xml ) {

@@ -32,7 +32,7 @@ require_once __DIR__ . '/src/WP_URL.php';
 require_once __DIR__ . '/src/xml-api/WP_XML_Decoder.php';
 require_once __DIR__ . '/src/xml-api/WP_XML_Processor.php';
 require_once __DIR__ . '/src/WP_WXR_URL_Rewrite_Processor.php';
-require_once __DIR__ . '/src/WP_WXR_Processor.php';
+require_once __DIR__ . '/src/WP_WXR_Reader.php';
 require_once __DIR__ . '/src/utf8_decoder.php';
 require_once __DIR__ . '/vendor/autoload.php';
 

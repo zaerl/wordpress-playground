@@ -2,13 +2,13 @@
 
 use PHPUnit\Framework\TestCase;
 
-class WPWXRProcessorTests extends TestCase {
+class WPWXRReaderTests extends TestCase {
     
     /**
      * @dataProvider preexisting_wxr_files_provider
      */
     public function test_does_not_crash_when_parsing_preexisting_wxr_files_as_string($path, $expected_entitys) {
-        $wxr = WP_WXR_Processor::from_string(file_get_contents($path));
+        $wxr = WP_WXR_Reader::from_string(file_get_contents($path));
 
         $found_entities = 0;
         while( $wxr->next_entity() ) {
@@ -23,7 +23,7 @@ class WPWXRProcessorTests extends TestCase {
      */
     public function test_does_not_crash_when_parsing_preexisting_wxr_files_as_stream($path, $expected_entitys) {
         $stream = fopen($path, 'r');
-        $wxr = WP_WXR_Processor::from_stream();
+        $wxr = WP_WXR_Reader::from_stream();
         $found_entities = 0;
         while(true) {
             $chunk = fread($stream, 100);
@@ -61,7 +61,7 @@ class WPWXRProcessorTests extends TestCase {
 
 
     public function test_simple_wxr() {
-        $importer = WP_WXR_Processor::from_string(file_get_contents(__DIR__ . '/fixtures/wxr-simple.xml'));
+        $importer = WP_WXR_Reader::from_string(file_get_contents(__DIR__ . '/fixtures/wxr-simple.xml'));
         $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             'site_option',
@@ -175,7 +175,7 @@ https://playground.internal/path-not-taken was the second best choice.
     }
 
     public function test_attachments() {
-        $importer = WP_WXR_Processor::from_string(<<<XML
+        $importer = WP_WXR_Reader::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
@@ -255,7 +255,7 @@ https://playground.internal/path-not-taken was the second best choice.
     }
 
     public function test_terms() {
-        $importer = WP_WXR_Processor::from_string(<<<XML
+        $importer = WP_WXR_Reader::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
@@ -288,7 +288,7 @@ https://playground.internal/path-not-taken was the second best choice.
     }
 
     public function test_category() {
-        $importer = WP_WXR_Processor::from_string(<<<XML
+        $importer = WP_WXR_Reader::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
@@ -317,7 +317,7 @@ https://playground.internal/path-not-taken was the second best choice.
     }
 
     public function test_tag_string() {
-        $wxr = WP_WXR_Processor::from_string(
+        $wxr = WP_WXR_Reader::from_string(
             <<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
@@ -364,7 +364,7 @@ https://playground.internal/path-not-taken was the second best choice.
         XML;
         $chunks = str_split($wxr, 10);
 
-        $wxr = WP_WXR_Processor::from_stream();
+        $wxr = WP_WXR_Reader::from_stream();
         while(true) {
             if(true === $wxr->next_entity()) {
                 break;
@@ -395,7 +395,7 @@ https://playground.internal/path-not-taken was the second best choice.
     }
 
     public function test_parse_comment() {
-        $wxr = WP_WXR_Processor::from_string(<<<XML
+        $wxr = WP_WXR_Reader::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
@@ -474,7 +474,7 @@ https://playground.internal/path-not-taken was the second best choice.
     }
 
     public function test_retains_last_ids() {
-        $wxr = WP_WXR_Processor::from_string(<<<XML
+        $wxr = WP_WXR_Reader::from_string(<<<XML
             <?xml version="1.0" encoding="UTF-8"?>
             <rss>
                 <channel>
