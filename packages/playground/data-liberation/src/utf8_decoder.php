@@ -228,15 +228,15 @@ function utf8_substr( string $text, int $from = 0, int $length = null ): string 
  * @return int Unicode codepoint.
  */
 function utf8_codepoint_at( string $text, int $byte_offset = 0, &$matched_bytes = 0 ) {
-    if($byte_offset < 0) {
-        return null;
-    }
+	if ( $byte_offset < 0 ) {
+		return null;
+	}
 
-	$position_in_input  = $byte_offset;
-	$code_point_at      = $byte_offset;
-	$end_byte           = strlen( $text );
-	$codepoint          = null;
-	$decoder_state      = UTF8_DECODER_ACCEPT;
+	$position_in_input = $byte_offset;
+	$code_point_at     = $byte_offset;
+	$end_byte          = strlen( $text );
+	$codepoint         = null;
+	$decoder_state     = UTF8_DECODER_ACCEPT;
 
 	// Get to the start of the string.
 	while ( $position_in_input < $end_byte ) {
@@ -244,43 +244,43 @@ function utf8_codepoint_at( string $text, int $byte_offset = 0, &$matched_bytes 
 
 		if ( UTF8_DECODER_ACCEPT === $decoder_state ) {
 			++$position_in_input;
-            $codepoint = utf8_ord( substr( $text, $code_point_at, $position_in_input - $code_point_at ) );
-            break;
+			$codepoint = utf8_ord( substr( $text, $code_point_at, $position_in_input - $code_point_at ) );
+			break;
 		} elseif ( UTF8_DECODER_REJECT === $decoder_state ) {
 			$codepoint = utf8_ord( "\u{FFFD}" );
-            break;
+			break;
 		} else {
 			++$position_in_input;
 		}
 	}
 
-    $matched_bytes = $position_in_input - $byte_offset;
+	$matched_bytes = $position_in_input - $byte_offset;
 	return $codepoint;
 }
 
 /**
  * Convert a UTF-8 byte sequence to its Unicode codepoint.
- * 
+ *
  * @param string $character UTF-8 encoded byte sequence representing a single Unicode character.
  * @return int Unicode codepoint.
  */
 function utf8_ord( string $character ): int {
-    // Convert the byte sequence to its binary representation
-    $bytes = unpack('C*', $character);
+	// Convert the byte sequence to its binary representation
+	$bytes = unpack( 'C*', $character );
 
-    // Initialize the codepoint
-    $codepoint = 0;
+	// Initialize the codepoint
+	$codepoint = 0;
 
-    // Calculate the codepoint based on the number of bytes
-    if (count($bytes) === 1) {
-        $codepoint = $bytes[1];
-    } elseif (count($bytes) === 2) {
-        $codepoint = (($bytes[1] & 0x1F) << 6) | ($bytes[2] & 0x3F);
-    } elseif (count($bytes) === 3) {
-        $codepoint = (($bytes[1] & 0x0F) << 12) | (($bytes[2] & 0x3F) << 6) | ($bytes[3] & 0x3F);
-    } elseif (count($bytes) === 4) {
-        $codepoint = (($bytes[1] & 0x07) << 18) | (($bytes[2] & 0x3F) << 12) | (($bytes[3] & 0x3F) << 6) | ($bytes[4] & 0x3F);
-    }
+	// Calculate the codepoint based on the number of bytes
+	if ( count( $bytes ) === 1 ) {
+		$codepoint = $bytes[1];
+	} elseif ( count( $bytes ) === 2 ) {
+		$codepoint = ( ( $bytes[1] & 0x1F ) << 6 ) | ( $bytes[2] & 0x3F );
+	} elseif ( count( $bytes ) === 3 ) {
+		$codepoint = ( ( $bytes[1] & 0x0F ) << 12 ) | ( ( $bytes[2] & 0x3F ) << 6 ) | ( $bytes[3] & 0x3F );
+	} elseif ( count( $bytes ) === 4 ) {
+		$codepoint = ( ( $bytes[1] & 0x07 ) << 18 ) | ( ( $bytes[2] & 0x3F ) << 12 ) | ( ( $bytes[3] & 0x3F ) << 6 ) | ( $bytes[4] & 0x3F );
+	}
 
-    return $codepoint;
+	return $codepoint;
 }

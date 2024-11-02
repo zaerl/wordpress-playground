@@ -870,7 +870,7 @@ class WP_XML_Processor {
 			return false;
 		}
 
-		if(self::STATE_INCOMPLETE_INPUT === $this->parser_state) {
+		if ( self::STATE_INCOMPLETE_INPUT === $this->parser_state ) {
 			$this->bytes_already_parsed = $was_at;
 			return false;
 		}
@@ -1405,7 +1405,6 @@ class WP_XML_Processor {
 				return false;
 			}
 
-
 			/*
 			 * XML tag names are defined by the same `Name` grammar rule as attribute
 			 * names.
@@ -1882,30 +1881,30 @@ class WP_XML_Processor {
 
 	/**
 	 * Parses a Name token starting at $offset
-	 * 
+	 *
 	 * Name ::= NameStartChar (NameChar)*
-	 * 
+	 *
 	 * @param int $offset
 	 * @return int
 	 */
 	private function parse_name( $offset ) {
 		$name_byte_length = 0;
-		while(true) {
+		while ( true ) {
 			/**
 			 * Parse the next unicode codepoint.
-			 * 
+			 *
 			 * The use of a custom UTF-8 decoder is necessary because no other method
 			 * can be reliably used in all WordPress installations:
-			 * 
+			 *
 			 * * mb_ord() – is not available on all hosts.
 			 * * iconv_substr() – is not available on all hosts.
 			 * * preg_match() – can fail with PREG_BAD_UTF8_ERROR when the input
-			 *    			    contains an incomplete UTF-8 byte sequence – even
-			 *    			    when that sequence comes after a valid match. This
+			 *                  contains an incomplete UTF-8 byte sequence – even
+			 *                  when that sequence comes after a valid match. This
 			 *                  failure mode cannot be reproduced with just any string.
-			 *					The runtime must be in a specific state. It's unclear
-			 *					how to reliably reproduce this failure mode in a
-			 *					unit test.
+			 *                  The runtime must be in a specific state. It's unclear
+			 *                  how to reliably reproduce this failure mode in a
+			 *                  unit test.
 			 *
 			 * Performance-wise, this is much faster than relying on preg_match(),
 			 * but it's likely slower than using the mbstring extension. @TODO: Evaluate.
@@ -1915,10 +1914,10 @@ class WP_XML_Processor {
 				$offset + $name_byte_length,
 				$bytes_parsed
 			);
-			
-			if(
+
+			if (
 				null === $codepoint ||
-				!$this->is_valid_name_codepoint($codepoint, $name_byte_length === 0)
+				! $this->is_valid_name_codepoint( $codepoint, $name_byte_length === 0 )
 			) {
 				break;
 			}
@@ -1932,39 +1931,39 @@ class WP_XML_Processor {
 		// Test against the NameStartChar pattern:
 		// NameStartChar ::= ":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] | [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
 		// See https://www.w3.org/TR/xml/#NT-Name
-		if(
+		if (
 			// :
 			58 === $codepoint ||
 			// _
 			95 === $codepoint ||
 			// A-Z
-			(65 <= $codepoint && 90 >= $codepoint) ||
+			( 65 <= $codepoint && 90 >= $codepoint ) ||
 			// a-z
-			(97 <= $codepoint && 122 >= $codepoint) ||
+			( 97 <= $codepoint && 122 >= $codepoint ) ||
 			// [#xC0-#xD6]
-			(192 <= $codepoint && 214 >= $codepoint) ||
+			( 192 <= $codepoint && 214 >= $codepoint ) ||
 			// [#xD8-#xF6]
-			(216 <= $codepoint && 246 >= $codepoint) ||
+			( 216 <= $codepoint && 246 >= $codepoint ) ||
 			// [#xF8-#x2FF]
-			(248 <= $codepoint && 511 >= $codepoint) ||
+			( 248 <= $codepoint && 511 >= $codepoint ) ||
 			// [#x370-#x37D]
-			(560 <= $codepoint && 573 >= $codepoint) ||
+			( 560 <= $codepoint && 573 >= $codepoint ) ||
 			// [#x37F-#x1FFF]
-			(895 <= $codepoint && 4095 >= $codepoint) ||
+			( 895 <= $codepoint && 4095 >= $codepoint ) ||
 			// [#x200C-#x200D]
-			(5120 <= $codepoint && 5125 >= $codepoint) ||
+			( 5120 <= $codepoint && 5125 >= $codepoint ) ||
 			// [#x2070-#x218F]
-			(8304 <= $codepoint && 8575 >= $codepoint) ||
+			( 8304 <= $codepoint && 8575 >= $codepoint ) ||
 			// [#x2C00-#x2FEF]
-			(11264 <= $codepoint && 12287 >= $codepoint) ||
+			( 11264 <= $codepoint && 12287 >= $codepoint ) ||
 			// [#x3001-#xD7FF]
-			(12288 <= $codepoint && 55295 >= $codepoint) ||
+			( 12288 <= $codepoint && 55295 >= $codepoint ) ||
 			// [#xF900-#xFDCF]
-			(60160 <= $codepoint && 60671 >= $codepoint) ||
+			( 60160 <= $codepoint && 60671 >= $codepoint ) ||
 			// [#xFDF0-#xFFFD]
-			(65536 <= $codepoint && 65543 >= $codepoint) ||
+			( 65536 <= $codepoint && 65543 >= $codepoint ) ||
 			// [#x10000-#xEFFFF]
-			(1048576 <= $codepoint && 1114111 >= $codepoint)
+			( 1048576 <= $codepoint && 1114111 >= $codepoint )
 		) {
 			return true;
 		}
@@ -1982,13 +1981,13 @@ class WP_XML_Processor {
 			// "."
 			46 === $codepoint ||
 			// [0-9]
-			(48 <= $codepoint && 57 >= $codepoint) ||
+			( 48 <= $codepoint && 57 >= $codepoint ) ||
 			// #xB7
 			183 === $codepoint ||
 			// [#x0300-#x036F]
-			(480 <= $codepoint && 559 >= $codepoint) ||
+			( 480 <= $codepoint && 559 >= $codepoint ) ||
 			// [#x203F-#x2040]
-			(5151 <= $codepoint && 5152 >= $codepoint)
+			( 5151 <= $codepoint && 5152 >= $codepoint )
 		);
 	}
 
@@ -3053,8 +3052,8 @@ class WP_XML_Processor {
 						$this->last_error = self::ERROR_SYNTAX;
 						_doing_it_wrong(
 							__METHOD__,
-							sprintf( 
-								__( 'The closing tag "%s" did not match the opening tag "%s".' ),
+							sprintf(
+								__( 'The closing tag "%1$s" did not match the opening tag "%2$s".' ),
 								$tag_name,
 								$popped
 							),

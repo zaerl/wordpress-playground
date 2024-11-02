@@ -7,24 +7,24 @@ class WPWXRProcessorTests extends TestCase {
     /**
      * @dataProvider preexisting_wxr_files_provider
      */
-    public function test_does_not_crash_when_parsing_preexisting_wxr_files_as_string($path, $expected_objects) {
+    public function test_does_not_crash_when_parsing_preexisting_wxr_files_as_string($path, $expected_entitys) {
         $wxr = WP_WXR_Processor::from_string(file_get_contents($path));
 
-        $found_objects = 0;
-        while( $wxr->next_object() ) {
-            ++$found_objects;
+        $found_entities = 0;
+        while( $wxr->next_entity() ) {
+            ++$found_entities;
         }
 
-        $this->assertEquals($expected_objects, $found_objects);
+        $this->assertEquals($expected_entitys, $found_entities);
     }
 
     /**
      * @dataProvider preexisting_wxr_files_provider
      */
-    public function test_does_not_crash_when_parsing_preexisting_wxr_files_as_stream($path, $expected_objects) {
+    public function test_does_not_crash_when_parsing_preexisting_wxr_files_as_stream($path, $expected_entitys) {
         $stream = fopen($path, 'r');
         $wxr = WP_WXR_Processor::from_stream();
-        $found_objects = 0;
+        $found_entities = 0;
         while(true) {
             $chunk = fread($stream, 100);
             if(false === $chunk || '' === $chunk) {
@@ -32,12 +32,12 @@ class WPWXRProcessorTests extends TestCase {
             }
 
             $wxr->append_bytes($chunk);
-            while(true === $wxr->next_object()) {
-                ++$found_objects;
+            while(true === $wxr->next_entity()) {
+                ++$found_entities;
             }
         }
 
-        $this->assertEquals($expected_objects, $found_objects);
+        $this->assertEquals($expected_entitys, $found_entities);
     }
 
     public function preexisting_wxr_files_provider() {
@@ -62,42 +62,42 @@ class WPWXRProcessorTests extends TestCase {
 
     public function test_simple_wxr() {
         $importer = WP_WXR_Processor::from_string(file_get_contents(__DIR__ . '/fixtures/wxr-simple.xml'));
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             'site_option',
-            $importer->get_object_type()
+            $importer->get_entity_type()
         );
         $this->assertEquals(
             [
                 'option_name' => 'blogname',
                 'option_value' => 'My WordPress Website',
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
 
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             'site_option',
-            $importer->get_object_type()
+            $importer->get_entity_type()
         );
         $this->assertEquals(
             [
                 'option_name' => 'siteurl',
                 'option_value' => 'https://playground.internal/path',
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
 
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             [
                 'option_name' => 'home',
                 'option_value' => 'https://playground.internal/path',
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
 
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             [
                 'user_login' => 'admin',
@@ -107,10 +107,10 @@ class WPWXRProcessorTests extends TestCase {
                 'last_name' => '',
                 'ID' => 1
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
         
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             [
                 'post_title' => '"The Road Not Taken" by Robert Frost',
@@ -150,28 +150,28 @@ https://playground.internal/path-not-taken was the second best choice.
                     'category' => ['Uncategorized']
                 ],
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
 
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             [
                 'meta_key' => '_pingme',
                 'meta_value' => '1',
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
 
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             [
                 'meta_key' => '_encloseme',
                 'meta_value' => '1',
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
 
-        $this->assertFalse($importer->next_object());
+        $this->assertFalse($importer->next_entity());
     }
 
     public function test_attachments() {
@@ -210,10 +210,10 @@ https://playground.internal/path-not-taken was the second best choice.
             </rss>
             XML
     );
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             'post',
-            $importer->get_object_type()
+            $importer->get_entity_type()
         );
         $this->assertEquals(
             [
@@ -237,20 +237,20 @@ https://playground.internal/path-not-taken was the second best choice.
                 'post_content' => '',
                 'is_sticky' => '0',
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
 
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             'post_meta',
-            $importer->get_object_type()
+            $importer->get_entity_type()
         );
         $this->assertEquals(
             [
                 'meta_key' => '_wc_attachment_source',
                 'meta_value' => 'https://raw.githubusercontent.com/wordpress/blueprints/stylish-press/blueprints/stylish-press/woo-product-images/vneck-tee-2.jpg',
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
     }
 
@@ -270,10 +270,10 @@ https://playground.internal/path-not-taken was the second best choice.
             </rss>
             XML
     );
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             'term',
-            $importer->get_object_type()
+            $importer->get_entity_type()
         );
         $this->assertEquals(
             [
@@ -283,7 +283,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'parent' => '',
                 'name' => 'fullscreen_slider',
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
     }
 
@@ -301,10 +301,10 @@ https://playground.internal/path-not-taken was the second best choice.
             </rss>
             XML
     );
-        $this->assertTrue( $importer->next_object() );
+        $this->assertTrue( $importer->next_entity() );
         $this->assertEquals(
             'category',
-            $importer->get_object_type()
+            $importer->get_entity_type()
         );
         $this->assertEquals(
             [
@@ -312,7 +312,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'parent' => '',
                 'name' => 'Uncategorized',
             ],
-            $importer->get_object_data()
+            $importer->get_entity_data()
         );
     }
 
@@ -332,10 +332,10 @@ https://playground.internal/path-not-taken was the second best choice.
             </rss>
             XML
         );
-        $this->assertTrue( $wxr->next_object() );
+        $this->assertTrue( $wxr->next_entity() );
         $this->assertEquals(
             'tag',
-            $wxr->get_object_type()
+            $wxr->get_entity_type()
         );
         $this->assertEquals(
             [
@@ -344,7 +344,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'name' => 'Articles',
                 'description' => 'Tags posts about Articles.',
             ],
-            $wxr->get_object_data()
+            $wxr->get_entity_data()
         );
     }
 
@@ -366,7 +366,7 @@ https://playground.internal/path-not-taken was the second best choice.
 
         $wxr = WP_WXR_Processor::from_stream();
         while(true) {
-            if(true === $wxr->next_object()) {
+            if(true === $wxr->next_entity()) {
                 break;
             }
 
@@ -381,7 +381,7 @@ https://playground.internal/path-not-taken was the second best choice.
 
         $this->assertEquals(
             'tag',
-            $wxr->get_object_type()
+            $wxr->get_entity_type()
         );
         $this->assertEquals(
             [
@@ -390,7 +390,7 @@ https://playground.internal/path-not-taken was the second best choice.
                 'name' => 'Articles for everyone',
                 'description' => 'Tags posts about Articles.',
             ],
-            $wxr->get_object_data()
+            $wxr->get_entity_data()
         );
     }
 
@@ -424,53 +424,53 @@ https://playground.internal/path-not-taken was the second best choice.
             </rss>
             XML
         );
-        $this->assertTrue( $wxr->next_object() );
+        $this->assertTrue( $wxr->next_entity() );
         $this->assertEquals(
             'post',
-            $wxr->get_object_type()
+            $wxr->get_entity_type()
         );
         $this->assertEquals(
             [
                 'post_title' => 'My post!',
             ],
-            $wxr->get_object_data()
+            $wxr->get_entity_data()
         );
 
-        $this->assertTrue( $wxr->next_object() );
+        $this->assertTrue( $wxr->next_entity() );
         $this->assertEquals(
             'comment',
-            $wxr->get_object_type()
+            $wxr->get_entity_type()
         );
         $this->assertEquals(
             [
                 'ID' => '167',
-                'approved' => '1',
-                'author' => 'Anon',
-                'author_email' => 'anon@example.com',
-                'author_IP' => '59.167.157.3',
-                'user_id' => '0',
-                'date' => '2007-09-04 10:49:28',
-                'date_gmt' => '2007-09-04 00:49:28',
-                'content' => 'Anonymous comment.',
-                'parent' => '0',
+                'comment_approved' => '1',
+                'comment_author' => 'Anon',
+                'comment_author_email' => 'anon@example.com',
+                'comment_author_IP' => '59.167.157.3',
+                'comment_user_id' => '0',
+                'comment_date' => '2007-09-04 10:49:28',
+                'comment_date_gmt' => '2007-09-04 00:49:28',
+                'comment_content' => 'Anonymous comment.',
+                'comment_parent' => '0',
             ],
-            $wxr->get_object_data()
+            $wxr->get_entity_data()
         );
 
-        $this->assertTrue( $wxr->next_object() );
+        $this->assertTrue( $wxr->next_entity() );
         $this->assertEquals(
             'comment_meta',
-            $wxr->get_object_type()
+            $wxr->get_entity_type()
         );
         $this->assertEquals(
             [
                 'meta_key' => '_wp_karma',
                 'meta_value' => '1',
             ],
-            $wxr->get_object_data()
+            $wxr->get_entity_data()
         );
 
-        $this->assertFalse( $wxr->next_object() );
+        $this->assertFalse( $wxr->next_entity() );
     }
 
     public function test_retains_last_ids() {
@@ -502,27 +502,27 @@ https://playground.internal/path-not-taken was the second best choice.
                 </channel>
             </rss>
             XML
-    );
-        $this->assertTrue( $wxr->next_object() );
-        $this->assertEquals('post', $wxr->get_object_type());
+        );
+        $this->assertTrue( $wxr->next_entity() );
+        $this->assertEquals('post', $wxr->get_entity_type());
         $this->assertEquals( 10, $wxr->get_last_post_id() );
 
-        $this->assertTrue( $wxr->next_object() );
-        $this->assertEquals('comment', $wxr->get_object_type());
+        $this->assertTrue( $wxr->next_entity() );
+        $this->assertEquals('comment', $wxr->get_entity_type());
         $this->assertEquals( 10, $wxr->get_last_post_id() );
         $this->assertEquals( 167, $wxr->get_last_comment_id() );
 
-        $this->assertTrue( $wxr->next_object() );
-        $this->assertEquals('comment', $wxr->get_object_type());
+        $this->assertTrue( $wxr->next_entity() );
+        $this->assertEquals('comment', $wxr->get_entity_type());
         $this->assertEquals( 10, $wxr->get_last_post_id() );
         $this->assertEquals( 168, $wxr->get_last_comment_id() );
 
-        $this->assertTrue( $wxr->next_object() );
-        $this->assertEquals('post', $wxr->get_object_type());
+        $this->assertTrue( $wxr->next_entity() );
+        $this->assertEquals('post', $wxr->get_entity_type());
         $this->assertEquals( 11, $wxr->get_last_post_id() );
 
-        $this->assertTrue( $wxr->next_object() );
-        $this->assertEquals('comment', $wxr->get_object_type());
+        $this->assertTrue( $wxr->next_entity() );
+        $this->assertEquals('comment', $wxr->get_entity_type());
         $this->assertEquals( 11, $wxr->get_last_post_id() );
         $this->assertEquals( 169, $wxr->get_last_comment_id() );
     }
