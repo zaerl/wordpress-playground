@@ -1,39 +1,36 @@
 <?php
 /**
- * XML API: WP_WXR_Reader class
- *
+ * Data Liberation API: WP_WXR_Reader class
+ * 
  * Reads WordPress eXtended RSS (WXR) files and emits entities like posts,
- * comments, users, and terms as they are encountered in the file. This
- * allows for streaming processing of large WXR files without loading the
- * entire file into memory at once.
+ * comments, users, and terms. Enables efficient processing of large WXR
+ * files without loading everything into memory.
+ * 
+ * Note this is just a reader. It doesn't import any data into WordPress. It
+ * only reads meaningful entities from the WXR file.
+ * 
+ * ## Design goals
+ * 
+ * WP_WXR_Reader is built with the following characteristics in mind:
+ * 
+ * * Speed – it should be as fast as possible
+ * * No PHP extensions required – it can run on any PHP installation
+ * * Reliability – no random crashes when encountering malformed XML or UTF-8 sequences
+ * * Low, predictable memory footprint to support 1000GB+ WXR files
+ * * Ability to pause, finish execution, and resume later, e.g. after a fatal error
  *
- * Example:
+ * ## Implementation
  *
- *     $reader = WP_WXR_Reader::from_string( $wxr_file );
- *     while ( $reader->next_entity() ) {
- *         $type = $reader->get_entity_type();
- *         $data = $reader->get_entity_data();
+ * `WP_WXR_Reader` uses the `WP_XML_Processor` to find XML tags representing meaningful 
+ * WordPress entities. The reader knows the WXR schema and only looks for relevant elements.
+ * For example, it knows that posts are stored in `rss > channel > item` and comments are 
+ * stored in `rss > channel > item > `wp:comment`.
  *
- *         switch ( $type ) {
- *             case 'post':
- *                 // Process post data...
- *                 break;
- *
- *             case 'comment':
- *                 // Process comment data...
- *                 break;
- *
- *             case 'user':
- *                 // Process user data...
- *                 break;
- *         }
- *     }
- *
- * The reader supports streaming input, meaning it can process a WXR file
- * as it's being downloaded or read from disk. This is particularly useful
- * for large WXR files that would otherwise consume too much memory if loaded
- * all at once.
- *
+ * The `$wxr->next_entity()` method stream-parses the next entity from the WXR document and 
+ * exposes it to the API consumer via `$wxr->get_entity_type()` and `$wxr->get_entity_date()`.
+ * The next call to `$wxr->next_entity()` remembers where the parsing has stopped and parses
+ * the next entity after that point.
+ * 
  * Example:
  *
  *     $reader = WP_WXR_Reader::from_stream();
@@ -43,7 +40,21 @@
  *
  *     // Process entities
  *     while ( $reader->next_entity() ) {
- *         // ...
+ *         switch ( $wxr_reader->get_entity_type() ) {
+ *             case 'post':
+ *                 // ... process post ...
+ *                 break;
+ *
+ *             case 'comment':
+ *                 // ... process comment ...
+ *                 break;
+ *
+ *             case 'site_option':
+ *                 // ... process site option ...
+ *                 break;
+ *
+ *             // ... process other entity types ...
+ *         }
  *     }
  *
  *     // Check if we need more input
@@ -51,14 +62,68 @@
  *         // Add more data and continue processing
  *         $reader->append_bytes( fread( $file_handle, 8192 ) );
  *     }
+ * 
+ * The next_entity() -> fread -> break usage pattern may seem a bit tedious. This is expected. Even 
+ * if the WXR parsing part of the WP_WXR_Reader offers a high-level API, working with byte streams 
+ * requires reasoning on a much lower level. The StreamChain class shipped in this repository will 
+ * make the API consumption easier with its transformation–oriented API for chaining data processors.
+ * 
+ * Similarly to `WP_XML_Processor`, the `WP_WXR_Reader` enters a paused state when it doesn't
+ * have enough XML bytes to parse the entire entity.
+ * 
+ * ## Caveats
  *
- * The reader maintains state about the last processed post and comment IDs
- * to help importers maintain referential integrity when processing entities
- * that reference other entities (like comments referencing posts).
+ * ### Extensibility
+ *
+ * `WP_WXR_Reader` ignores any XML elements it doesn't recognize. The WXR format is extensible 
+ * so in the future the  reader may start supporting registration of custom handlers for unknown 
+ * tags in the future.
+ *
+ * ### Nested entities intertwined with data
+ *
+ * `WP_WXR_Reader` flushes the current entity whenever another entity starts. The upside is 
+ * simplicity and a tiny memory footprint. The downside is that it's possible to craft a WXR 
+ * document where some information would be lost. For example:
+ *
+ * ```xml
+ * <rss>
+ * 	<channel>
+ * 		<item>
+ *		  <title>Page with comments</title>
+ *		  <link>http://wpthemetestdata.wordpress.com/about/page-with-comments/</link>
+ *		  <wp:postmeta>
+ *		    <wp:meta_key>_wp_page_template</wp:meta_key>
+ *		    <wp:meta_value><![CDATA[default]]></wp:meta_value>
+ *		  </wp:postmeta>
+ *		  <wp:post_id>146</wp:post_id>
+ *		</item>
+ *	</channel>
+ * </rss>
+ * ```
+ *
+ * `WP_WXR_Reader` would accumulate post data until the `wp:post_meta` tag. Then it would emit a
+ * `post` entity and accumulate the meta information until the `</wp:postmeta>` closer. Then it 
+ * would advance to `<wp:post_id>` and **ignore it**.
+ *
+ * This is not a problem in all the `.wxr` files I saw. Still, it is important to note this limitation. 
+ * It is possible there is a `.wxr` generator somewhere out there that intertwines post fields with post
+ *  meta and comments. If this ever comes up, we could:
+ * 
+ * * Emit the `post` entity first, then all the nested entities, and then emit a special `post_update` entity.
+ * * Do multiple passes over the WXR file – one for each level of nesting, e.g. 1. Insert posts, 2. Insert Comments, 3. Insert comment meta
+ *
+ * Buffering all the post meta and comments seems like a bad idea – there might be gigabytes of data.
+ * 
+ * ## Remaining work
+ * 
+ * @TODO:
+ *
+ * - Save parser state after each entity or every `n` entities to speed it up. Then also save the `n` 
+ *   for a quick rewind after resuming.
+ * - Resume parsing from saved state.
  *
  * @since WP_VERSION
  */
-
 class WP_WXR_Reader {
 
 	/**
