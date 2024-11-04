@@ -33,6 +33,7 @@ import {
 	setSiteManagerOpen,
 } from '../../lib/state/redux/slice-ui';
 import { ImportFormModal } from '../import-form/modal';
+import { logErrorEvent } from '../../lib/tracking';
 
 acquireOAuthTokenIfNeeded();
 
@@ -42,8 +43,8 @@ export const modalSlugs = {
 	START_ERROR: 'start-error',
 	IMPORT_FORM: 'import-form',
 	GITHUB_IMPORT: 'github-import',
-	GITHUB_EXPORT: 'github-export'
-}
+	GITHUB_EXPORT: 'github-export',
+};
 
 const displayMode = getDisplayModeFromQuery();
 function getDisplayModeFromQuery(): DisplayMode {
@@ -159,6 +160,8 @@ function Modals(blueprint: Blueprint) {
 	useEffect(() => {
 		addCrashListener(logger, (e) => {
 			const error = e as CustomEvent;
+			logErrorEvent(error.detail?.source);
+
 			if (error.detail?.source === 'php-wasm') {
 				dispatch(setActiveModal(modalSlugs.ERROR_REPORT));
 			}
@@ -179,39 +182,43 @@ function Modals(blueprint: Blueprint) {
 	} else if (currentModal === modalSlugs.IMPORT_FORM) {
 		return <ImportFormModal />;
 	} else if (currentModal === modalSlugs.GITHUB_IMPORT) {
-		return <GithubImportModal
-			onImported={({
-				 url,
-				 path,
-				 files,
-				 pluginOrThemeName,
-				 contentType,
-				 urlInformation: { owner, repo, type, pr },
-			 }) => {
-				setGithubExportValues({
-					repoUrl: url,
-					prNumber: pr?.toString(),
-					toPathInRepo: path,
-					prAction: pr ? 'update' : 'create',
+		return (
+			<GithubImportModal
+				onImported={({
+					url,
+					path,
+					files,
+					pluginOrThemeName,
 					contentType,
-					plugin: pluginOrThemeName,
-					theme: pluginOrThemeName,
-				});
-				setGithubExportFiles(files);
-			}}
-		/>;
+					urlInformation: { owner, repo, type, pr },
+				}) => {
+					setGithubExportValues({
+						repoUrl: url,
+						prNumber: pr?.toString(),
+						toPathInRepo: path,
+						prAction: pr ? 'update' : 'create',
+						contentType,
+						plugin: pluginOrThemeName,
+						theme: pluginOrThemeName,
+					});
+					setGithubExportFiles(files);
+				}}
+			/>
+		);
 	} else if (currentModal === modalSlugs.GITHUB_EXPORT) {
-		return <GithubExportModal
-			allowZipExport={
-				(query.get('ghexport-allow-include-zip') ?? 'yes') === 'yes'
-			}
-			initialValues={githubExportValues}
-			initialFilesBeforeChanges={githubExportFiles}
-			onExported={(prUrl, formValues) => {
-				setGithubExportValues(formValues);
-				setGithubExportFiles(undefined);
-			}}
-		/>;
+		return (
+			<GithubExportModal
+				allowZipExport={
+					(query.get('ghexport-allow-include-zip') ?? 'yes') === 'yes'
+				}
+				initialValues={githubExportValues}
+				initialFilesBeforeChanges={githubExportFiles}
+				onExported={(prUrl, formValues) => {
+					setGithubExportValues(formValues);
+					setGithubExportFiles(undefined);
+				}}
+			/>
+		);
 	}
 
 	if (query.get('gh-ensure-auth') === 'yes') {
