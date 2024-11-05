@@ -135,6 +135,7 @@ const platformDefaults = {
 		WITH_MBREGEX: 'yes',
 		WITH_OPENSSL: 'yes',
 		WITH_WS_NETWORKING_PROXY: 'yes',
+		WITH_SOAP: 'yes',
 	},
 	web: {},
 	node: {

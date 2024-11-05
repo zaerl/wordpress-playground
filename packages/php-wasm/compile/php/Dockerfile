@@ -66,6 +66,7 @@ ARG WITH_MYSQL
 ARG WITH_OPENSSL
 ARG WITH_ICONV
 ARG WITH_SOURCEMAPS
+ARG WITH_SOAP
 ARG WITH_WS_NETWORKING_PROXY
 
 # The platform to build for: web or node
@@ -145,7 +146,8 @@ RUN if [ "$WITH_CLI_SAPI" = "yes" ]; \
 	fi;
 
 # Add Libxml2 if needed
-RUN if [ "$WITH_LIBXML" = "yes" ]; \
+# Libxml is a dependency for Soap
+RUN if [ "$WITH_LIBXML" = "yes" ] || [ "$WITH_SOAP" = "yes" ]; \
 	then \
 		set -euxo pipefail;\
 		echo -n ' --enable-libxml --with-libxml --with-libxml-dir=/root/lib --enable-dom --enable-xml --enable-simplexml --enable-xmlreader --enable-xmlwriter' >> /root/.php-configure-flags && \
@@ -161,6 +163,12 @@ RUN if [ "$WITH_LIBXML" = "yes" ]; \
 	else \
 		echo -n ' --disable-libxml --without-libxml --disable-dom --disable-xml --disable-simplexml --disable-xmlreader --disable-xmlwriter' >> /root/.php-configure-flags; \
 	fi
+
+# Add Soap if needed
+RUN if [ "$WITH_SOAP" = "yes" ]; \
+	then \
+		echo -n ' --enable-soap ' >> /root/.php-configure-flags; \
+	fi;
 
 # Add sqlite3 if needed
 RUN if [ "$WITH_SQLITE" = "yes" ]; \
@@ -932,7 +940,7 @@ RUN set -euxo pipefail; \
 	else \
 		export ASYNCIFY_FLAGS=" -s ASYNCIFY=1 -s ASYNCIFY_IGNORE_INDIRECT=1 -s EXPORTED_RUNTIME_METHODS=ccall,PROXYFS,wasmExports $(cat /root/.emcc-php-asyncify-flags)  "; \
 		echo '' > /root/php_wasm_asyncify.h; \
-	fi; \	
+	fi; \
 	export EXPORTED_FUNCTIONS=$'["_exit", \n\
 "UTF8ToString", \n\
 "stringToUTF8", \n\
