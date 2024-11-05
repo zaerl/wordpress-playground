@@ -1,4 +1,5 @@
 import { StepDefinition } from '@wp-playground/blueprints';
+import { logger } from '@php-wasm/logger';
 
 /**
  * Declare the global window.gtag function
@@ -23,43 +24,13 @@ export const logTrackingEvent = (
 	event: GAEvent,
 	data?: { [key: string]: string }
 ) => {
-	if (typeof window === 'undefined' || !window.gtag) {
-		return;
-	}
-	window.gtag('event', event, data);
-};
-
-/**
- * Log Plugin install events
- * @param step The Blueprint step
- */
-export const logPluginInstallEvent = (step: StepDefinition) => {
-	const pluginData = (step as any).pluginData;
-	if (pluginData.slug) {
-		logTrackingEvent('install', {
-			plugin: pluginData.slug,
-		});
-	} else if (pluginData.url) {
-		logTrackingEvent('install', {
-			plugin: pluginData.url,
-		});
-	}
-};
-
-/**
- * Log Theme install events
- * @param step The Blueprint step
- */
-export const logThemeInstallEvent = (step: StepDefinition) => {
-	const themeData = (step as any).themeData;
-	if (themeData.slug) {
-		logTrackingEvent('install', {
-			theme: themeData.slug,
-		});
-	} else if (themeData.url) {
-		logTrackingEvent('install', {
-			theme: themeData.url,
-		});
+	try {
+		if (typeof window === 'undefined' || !window.gtag) {
+			return;
+		}
+		window.gtag('event', event, data);
+	} catch (error) {
+		logger.warn('Failed to log tracking event', event, data, error);
 	}
 };
 
@@ -75,10 +46,14 @@ export const logBlueprintStepEvent = (step: StepDefinition) => {
 	 */
 	logTrackingEvent('step', { step: step.step });
 
-	if (step.step === 'installPlugin') {
-		logPluginInstallEvent(step);
-	} else if (step.step === 'installTheme') {
-		logThemeInstallEvent(step);
+	if (step.step === 'installPlugin' && (step as any).pluginData.slug) {
+		logTrackingEvent('install', {
+			plugin: (step as any).pluginData.slug,
+		});
+	} else if (step.step === 'installTheme' && (step as any).themeData.slug) {
+		logTrackingEvent('install', {
+			theme: (step as any).themeData.slug,
+		});
 	}
 };
 
