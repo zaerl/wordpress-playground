@@ -173,7 +173,7 @@ export function bootSiteClient(
 			}
 		} catch (e) {
 			logger.error(e);
-			logErrorEvent('boot');
+			logErrorEvent('bootSiteClient');
 			dispatch(setActiveSiteError('site-boot-failed'));
 			dispatch(setActiveModal(modalSlugs.ERROR_REPORT));
 			return;
