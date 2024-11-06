@@ -145,12 +145,20 @@ RUN if [ "$WITH_CLI_SAPI" = "yes" ]; \
 		echo -n ' --disable-cli ' >> /root/.php-configure-flags; \
 	fi;
 
+# Add Soap if needed
+RUN	if [ "$WITH_SOAP" = "yes" ]; then \
+	echo -n ' --enable-soap ' >> /root/.php-configure-flags; \
+fi;
+
 # Add Libxml2 if needed
-# Libxml is a dependency for Soap
+# Libxml is a dependency for Soap, so we need to enable it if Soap is enabled
 RUN if [ "$WITH_LIBXML" = "yes" ] || [ "$WITH_SOAP" = "yes" ]; \
 	then \
 		set -euxo pipefail;\
 		echo -n ' --enable-libxml --with-libxml --with-libxml-dir=/root/lib --enable-dom --enable-xml --enable-simplexml --enable-xmlreader --enable-xmlwriter' >> /root/.php-configure-flags && \
+		if [ "$WITH_SOAP" = "yes" ]; then \
+			echo -n ' --enable-soap ' >> /root/.php-configure-flags; \
+		fi; \
 		echo -n ' -I /root/lib -I /root/lib/include/libxml2 -lxml2' >> /root/.emcc-php-wasm-flags && \
 		echo -n ' /root/lib/lib/libxml2.a' >> /root/.emcc-php-wasm-sources && \
 		# Libxml check is wrong in PHP < 7.4.0.
@@ -163,12 +171,6 @@ RUN if [ "$WITH_LIBXML" = "yes" ] || [ "$WITH_SOAP" = "yes" ]; \
 	else \
 		echo -n ' --disable-libxml --without-libxml --disable-dom --disable-xml --disable-simplexml --disable-xmlreader --disable-xmlwriter' >> /root/.php-configure-flags; \
 	fi
-
-# Add Soap if needed
-RUN if [ "$WITH_SOAP" = "yes" ]; \
-	then \
-		echo -n ' --enable-soap ' >> /root/.php-configure-flags; \
-	fi;
 
 # Add sqlite3 if needed
 RUN if [ "$WITH_SQLITE" = "yes" ]; \

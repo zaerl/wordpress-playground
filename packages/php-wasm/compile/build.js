@@ -210,6 +210,8 @@ await asyncSpawn(
 		'--build-arg',
 		getArg('WITH_SOURCEMAPS'),
 		'--build-arg',
+		getArg('WITH_SOAP'),
+		'--build-arg',
 		getArg('WITH_ICONV'),
 		'--build-arg',
 		getArg('WITH_MYSQL'),
