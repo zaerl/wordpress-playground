@@ -529,7 +529,19 @@ RUN export ASYNCIFY_IMPORTS=$'["_dlopen_js",\n\
 "dynCall_viiiiiii",\
 "dynCall_viiiiiiii",'; \
 
-export ASYNCIFY_ONLY=$'"rc_dtor_func",\
+export ASYNCIFY_ONLY=$'"php_libxml_streams_IO_open_wrapper",\
+"php_libxml_input_buffer_create_filename",\
+"xmlParserInputBufferCreateFilename",\
+"xmlNewInputFromFile",\
+"xmlDefaultExternalEntityLoader",\
+"_php_libxml_pre_ext_ent_loader",\
+"xmlLoadExternalEntity",\
+"xmlCreateURLParserCtxt",\
+"soap_xmlParseFile",\
+"load_wsdl_ex",\
+"get_sdl",\
+"zim_SoapClient___construct",\
+"rc_dtor_func",\
 "zif_curl_exec",\
 "curl_easy_perform",\
 "Curl_wait_ms",\
