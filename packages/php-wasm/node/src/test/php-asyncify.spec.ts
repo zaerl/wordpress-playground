@@ -220,8 +220,9 @@ describe.each(phpVersions)('PHP %s – asyncify', (phpVersion) => {
 				}
 			`));
 			test('SoapClient', () => {
+				// @TODO: Find a better source for the WSDL
 				assertNoCrash(`
-					$client = new SoapClient('https://www.w3schools.com/xml/tempconvert.asmx?WSDL');
+					$client = new SoapClient('https://gist.githubusercontent.com/bgrgicak/f8554eb8ee4a1adf1587e3badda60638/raw/7c1416f374e1be6a63835d7cac319d92a5397625/soap-test-data.asmx');
 					echo json_encode($client->CelsiusToFahrenheit(array('Celsius' => 100)));
 				`);
 			});
