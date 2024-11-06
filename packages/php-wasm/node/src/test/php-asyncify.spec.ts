@@ -219,6 +219,12 @@ describe.each(phpVersions)('PHP %s – asyncify', (phpVersion) => {
 					echo $number;
 				}
 			`));
+			test('SoapClient', () => {
+				assertNoCrash(`
+					$client = new SoapClient('https://www.w3schools.com/xml/tempconvert.asmx?WSDL');
+					echo json_encode($client->CelsiusToFahrenheit(array('Celsius' => 100)));
+				`);
+			});
 		});
 	});
 
