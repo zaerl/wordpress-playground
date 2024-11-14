@@ -13,7 +13,7 @@ declare global {
 /**
  * Google Analytics event names
  */
-type GAEvent = 'load' | 'step' | 'install' | 'error';
+type GAEvent = 'load' | 'step' | 'installPlugin' | 'installTheme' | 'error';
 
 /**
  * Log a tracking event to Google Analytics
@@ -47,12 +47,12 @@ export const logBlueprintStepEvent = (step: StepDefinition) => {
 	logTrackingEvent('step', { step: step.step });
 
 	if (step.step === 'installPlugin' && (step as any).pluginData.slug) {
-		logTrackingEvent('install', {
-			plugin: (step as any).pluginData.slug,
+		logTrackingEvent('installPlugin', {
+			slug: (step as any).pluginData.slug,
 		});
 	} else if (step.step === 'installTheme' && (step as any).themeData.slug) {
-		logTrackingEvent('install', {
-			theme: (step as any).themeData.slug,
+		logTrackingEvent('installTheme', {
+			slug: (step as any).themeData.slug,
 		});
 	}
 };
