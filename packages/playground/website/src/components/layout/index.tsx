@@ -160,7 +160,7 @@ function Modals(blueprint: Blueprint) {
 	useEffect(() => {
 		addCrashListener(logger, (e) => {
 			const error = e as CustomEvent;
-			logErrorEvent(error.detail?.source ?? 'unknown');
+			logErrorEvent(error.detail.source ?? 'unknown');
 
 			if (error.detail?.source === 'php-wasm') {
 				dispatch(setActiveModal(modalSlugs.ERROR_REPORT));
