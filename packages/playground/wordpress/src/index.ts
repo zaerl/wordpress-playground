@@ -161,10 +161,15 @@ export async function setupPlatformLevelMuPlugins(php: UniversalPHP) {
 			 * WordPress uses cookies to determine if the user is logged in,
 			 * so we need to reload the page to ensure the cookies are set.
 			 */
-			wp_redirect(
-				$_SERVER['REQUEST_URI'],
-				302
-			);
+			$redirect_url = $_SERVER['REQUEST_URI'];
+			/**
+			 * Intentionally do not use wp_redirect() here. It removes
+			 * %0A and %0D sequences from the URL, which we don't want.
+			 * There are valid use-cases for encoded newlines in the query string,
+			 * for example html-api-debugger accepts markup with newlines
+			 * encoded as %0A via the query string.
+			 */
+			header( "Location: $redirect_url", true, 302 );
 			exit;
 		}
 		/**
