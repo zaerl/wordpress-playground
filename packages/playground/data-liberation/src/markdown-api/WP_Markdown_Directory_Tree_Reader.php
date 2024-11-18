@@ -14,7 +14,7 @@ class WP_Markdown_Directory_Tree_Reader implements Iterator {
 	private $pending_files = array();
 	private $parent_ids    = array();
 	private $next_post_id;
-	private $is_finished = false;
+	private $is_finished          = false;
 	private $entities_read_so_far = 0;
 
 	public function __construct( $root_dir, $first_post_id ) {

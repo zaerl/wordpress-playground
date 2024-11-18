@@ -98,6 +98,7 @@ class WP_Stream_Importer {
 	 * Iterator that streams entities to import.
 	 */
 	private $entities_iterator;
+	private $entities_iterator_cursor;
 
 	/**
 	 * The WordPress entity importer instance.
@@ -127,6 +128,11 @@ class WP_Stream_Importer {
 		}
 	}
 
+	private $downloader;
+	private $entity_cursors   = array();
+	private $entity_to_urls   = array();
+	private $urls_to_entities = array();
+
 	/**
 	 * Downloads all the assets referenced in the imported entities.
 	 *
@@ -139,75 +145,119 @@ class WP_Stream_Importer {
 			$factory                 = $this->entity_iterator_factory;
 			$this->entities_iterator = $factory();
 			// @TODO: Seek to the last processed entity if we have a cursor.
-			$this->client = new \WordPress\AsyncHttp\Client();
+			$this->downloader = new WP_Attachment_Downloader( $this->options );
 		}
 
-		if ( ! $this->entities_iterator->valid() && ! $this->has_pending_requests() ) {
+		while ( $this->downloader->next_event() ) {
+			$event = $this->downloader->get_event();
+			switch ( $event->type ) {
+				case WP_Attachment_Downloader_Event::SUCCESS:
+				case WP_Attachment_Downloader_Event::FAILURE:
+					$this->pop_downloaded_url( $event->url );
+					break;
+			}
+		}
+
+		/**
+		 * Advance the cursor to the oldest finished download. For example:
+		 *
+		 * * We've started downloading files A, B, C, and D in this order.
+		 * * D is the first to finish. We don't do anything yet.
+		 * * A finishes next. We advance the cursor to A.
+		 * * C finishes next. We don't do anything.
+		 * * Then we pause.
+		 *
+		 * When we resume, we'll start where we left off, which is after A. The
+		 * downloader will enqueue B for download and will skip C and D since
+		 * the relevant files already exist in the filesystem.
+		 */
+		while ( count( $this->entity_to_urls ) > 0 ) {
+			$oldest_entity_key = key( $this->entity_to_urls );
+			if ( null === $oldest_entity_key ) {
+				break;
+			}
+			if ( ! empty( $this->entity_to_urls[ $oldest_entity_key ] ) ) {
+				break;
+			}
+			$this->entities_iterator_cursor = $this->entity_cursors[ $oldest_entity_key ];
+			unset( $this->entity_cursors[ $oldest_entity_key ] );
+			unset( $this->entity_to_urls[ $oldest_entity_key ] );
+		}
+
+		// We're done if all the entities are processed and all the downloads are finished.
+		if ( ! $this->entities_iterator->valid() && ! $this->downloader->has_pending_requests() ) {
 			$this->state             = self::STATE_IMPORT_ENTITIES;
-			$this->client            = null;
+			$this->downloader        = null;
 			$this->entities_iterator = null;
-			return;
+			return false;
 		}
 
-		$only_downloader_pending = ! $this->entities_iterator->valid() && $this->has_pending_requests();
-		if ( $this->download_queue_full() || $only_downloader_pending ) {
-			// Twiddle our thumbs as the downloader processes the requests...
+		// Poll the data periodically.
+		$only_downloader_pending = ! $this->entities_iterator->valid() && $this->downloader->has_pending_requests();
+		if ( $this->downloader->queue_full() || $only_downloader_pending ) {
 			/**
 			 * @TODO:
-			 * * Consider inlining the downloader code into this class.
 			 * * Process and store failures.
 			 *   E.g. what if the attachment is not found? Error out? Ignore? In a UI-based
 			 *   importer scenario, this is the time to log a failure to let the user
 			 *   fix it later on. In a CLI-based Blueprint step importer scenario, we
 			 *   might want to provide an "image not found" placeholder OR ignore the
 			 *   failure.
-			 */
-			if(false === $this->poll_attachments()) {
-				return;
-			}
-			/**
+			 * 
 			 * @TODO: Update the download progress:
 			 * * After every downloaded file.
 			 * * For large files, every time a full megabyte is downloaded above 10MB.
 			 */
-			/**
-			 * @TODO: Advance the cursor to the oldest finished download. For example:
-			 *
-			 * * We've started downloading files A, B, C, and D in this order.
-			 * * D is the first to finish. We don't do anything yet.
-			 * * A finishes next. We advance the cursor to A.
-			 * * C finishes next. We don't do anything.
-			 * * Then we pause.
-			 *
-			 * When we resume, we'll start where we left off, which is after A. The
-			 * downloader will enqueue B for download and will skip C and D since
-			 * the relevant files already exist in the filesystem.
-			 */
-			return;
+			return $this->downloader->poll();
 		}
+
+		/**
+		 * Identify the static assets referenced in the current entity
+		 * and enqueue them for download.
+		 */
+		$entity_key = $this->entities_iterator->key();
+
+		/**
+		 * Store the cursor for the next entity. We'll advance later on
+		 * when all its downloads are done.
+		 *
+		 * @TODO: Cleanup or skip over stale cursors. When processing slow downloads,
+		 *        we could easily end up with millions of entries in $this->entity_cursors.
+		 */
+		$this->entity_to_urls[ $entity_key ] = array();
+		$this->entity_cursors[ $entity_key ] = $this->entities_iterator->pause();
 
 		$entity = $this->entities_iterator->current();
 		$data   = $entity->get_data();
-		if ( 'site_option' === $entity->get_type() && $data['option_name'] === 'home' ) {
-			$this->source_site_url = $data['option_value'];
-		} elseif ( 'post' === $entity->get_type() ) {
-			if ( isset( $data['post_type'] ) && $data['post_type'] === 'attachment' ) {
-				$this->enqueue_attachment_download($data['attachment_url'], null);
-			} elseif ( isset( $data['post_content'] ) ) {
-				$post = $data;
-				$p = new WP_Block_Markup_Url_Processor( $post['post_content'], $this->source_site_url );
-				while ( $p->next_url() ) {
-					if ( ! $this->url_processor_matched_asset_url( $p ) ) {
-						continue;
-					}
-					$this->enqueue_attachment_download(
-						$p->get_raw_url(),
-						$post['source_path'] ?? $post['slug'] ?? null
-					);
+		switch ( $entity->get_type() ) {
+			case 'site_option':
+				if ( $data['option_name'] === 'home' ) {
+					$this->source_site_url = $data['option_value'];
 				}
-			}
+				break;
+			case 'post':
+				if ( isset( $data['post_type'] ) && $data['post_type'] === 'attachment' ) {
+					$this->enqueue_attachment_download( $data['attachment_url'], null );
+				} elseif ( isset( $data['post_content'] ) ) {
+					$post = $data;
+					$p    = new WP_Block_Markup_Url_Processor( $post['post_content'], $this->source_site_url );
+					while ( $p->next_url() ) {
+						if ( ! $this->url_processor_matched_asset_url( $p ) ) {
+							continue;
+						}
+						$this->enqueue_attachment_download(
+							$p->get_raw_url(),
+							$post['source_path'] ?? $post['slug'] ?? null
+						);
+					}
+				}
+				break;
 		}
+
+		// Move on to the next entity.
 		$this->entities_iterator->next();
+
+		return true;
 	}
 
 	/**
@@ -290,6 +340,41 @@ class WP_Stream_Importer {
 		$this->entities_iterator->next();
 	}
 
+	protected function enqueue_attachment_download( string $raw_url, $context_path = null ) {
+		$url            = $this->rewrite_attachment_url( $raw_url, $context_path );
+		$asset_filename = $this->new_asset_filename( $raw_url );
+		$output_path    = $this->options['uploads_path'] . '/' . ltrim( $asset_filename, '/' );
+
+		$this->push_downloaded_url( $url, $this->entities_iterator->key() );
+		return $this->downloader->enqueue_if_not_exists( $url, $output_path );
+	}
+
+	/**
+	 * For cursor advancement purposes.
+	 * Marks an URL as being downloaded in relation to the current entity.
+	 */
+	protected function push_downloaded_url( string $url, $entity_key ) {
+		if ( ! isset( $this->entity_to_urls[ $entity_key ] ) ) {
+			$this->entity_to_urls[ $entity_key ] = array();
+		}
+		if ( ! isset( $this->urls_to_entities[ $url ] ) ) {
+			$this->urls_to_entities[ $url ] = array();
+		}
+		$this->entity_to_urls[ $entity_key ][ $url ]   = true;
+		$this->urls_to_entities[ $url ][ $entity_key ] = true;
+	}
+
+	protected function pop_downloaded_url( string $url ) {
+		$entity_keys = array_keys( $this->urls_to_entities[ $url ] );
+		foreach ( $entity_keys as $entity_key ) {
+			unset( $this->urls_to_entities[ $url ][ $entity_key ] );
+			unset( $this->entity_to_urls[ $entity_key ][ $url ] );
+		}
+		if ( empty( $this->urls_to_entities[ $url ] ) ) {
+			unset( $this->urls_to_entities[ $url ] );
+		}
+	}
+
 	/**
 	 * The downloaded file name is based on the URL hash.
 	 *
@@ -337,53 +422,6 @@ class WP_Stream_Importer {
 		return $filename;
 	}
 
-	protected function enqueue_attachment_download( string $raw_url, $context_path = null ) {
-		$url            = $this->rewrite_attachment_url( $raw_url, $context_path );
-		$asset_filename = $this->new_asset_filename( $raw_url );
-		$output_path    = $this->options['uploads_path'] . '/' . ltrim( $asset_filename, '/' );
-
-		if ( file_exists( $output_path ) ) {
-			// @TODO: Reconsider the return value. The enqueuing operation failed,
-			//        but overall already having a file seems like a success.
-			return true;
-		}
-
-		$output_dir = dirname( $output_path );
-		if ( ! file_exists( $output_dir ) ) {
-			// @TODO: think through the chmod of the created directory.
-			mkdir( $output_dir, 0777, true );
-		}
-
-		$protocol = parse_url( $url, PHP_URL_SCHEME );
-		if ( null === $protocol ) {
-			return false;
-		}
-
-		switch ( $protocol ) {
-			case 'file':
-				$local_path = parse_url( $url, PHP_URL_PATH );
-				if ( false === $local_path ) {
-					return false;
-				}
-				// Just copy the file over.
-				// @TODO: think through the chmod of the created file.
-				return copy( $local_path, $output_path );
-			case 'http':
-			case 'https':
-				$request                            = new Request( $url );
-				$this->output_paths[ $request->id ] = $output_path;
-				$this->client->enqueue( $request );
-				return true;
-		}
-
-		// @TODO: Save the failure info somewhere so the user can review it later
-		//        and either retry or provide their own asset.
-		// Meanwhile, we may either halt the content import, or provide a placeholder
-		// asset.
-		_doing_it_wrong( __METHOD__, "Failed to fetch attachment '$raw_url' from '$url'", '__WP_VERSION__' );
-		return false;
-	}
-
 	protected function rewrite_attachment_url( string $raw_url, $context_path = null ) {
 		if ( WP_URL::can_parse( $raw_url ) ) {
 			// Absolute URL, nothing to do.
@@ -413,77 +451,5 @@ class WP_Stream_Importer {
 			$p->get_inspected_attribute_name() === 'src' &&
 			( ! $this->source_site_url || url_matches( $p->get_parsed_url(), $this->source_site_url ) )
 		);
-	}
-
-	private $client;
-	private $fps           = array();
-	private $partial_files = array();
-	private $output_paths  = array();
-
-	private function has_pending_requests() {
-		return count( $this->client->get_active_requests() ) > 0;
-	}
-
-	public function download_queue_full() {
-		return count( $this->client->get_active_requests() ) >= 10;
-	}
-
-	public function poll_attachments() {
-		$event   = $this->client->get_event();
-		$request = $this->client->get_request();
-		// The request object we get from the client may be a redirect.
-		// Let's keep referring to the original request.
-		$original_request_id = $request->original_request()->id;
-
-		switch ( $event ) {
-			case Client::EVENT_GOT_HEADERS:
-				if ( ! $request->is_redirected() ) {
-					if ( file_exists( $this->output_paths[ $original_request_id ] . '.partial' ) ) {
-						unlink( $this->output_paths[ $original_request_id ] . '.partial' );
-					}
-					$this->fps[ $original_request_id ] = fopen( $this->output_paths[ $original_request_id ] . '.partial', 'wb' );
-					if ( false === $this->fps[ $original_request_id ] ) {
-						// @TODO: Log an error.
-					}
-				}
-				break;
-			case Client::EVENT_BODY_CHUNK_AVAILABLE:
-				$chunk = $this->client->get_response_body_chunk();
-				if ( false === fwrite( $this->fps[ $original_request_id ], $chunk ) ) {
-					// @TODO: Log an error.
-				}
-				break;
-			case Client::EVENT_FAILED:
-				if ( isset( $this->fps[ $original_request_id ] ) ) {
-					fclose( $this->fps[ $original_request_id ] );
-				}
-				if ( isset( $this->partial_files[ $original_request_id ] ) ) {
-					$partial_file = $this->options['uploads_path'] . '/' . $this->output_paths[ $original_request_id ] . '.partial';
-					if ( file_exists( $partial_file ) ) {
-						unlink( $partial_file );
-					}
-				}
-				unset( $this->output_paths[ $original_request_id ] );
-				break;
-			case Client::EVENT_FINISHED:
-				if ( ! $request->is_redirected() ) {
-					// Only clean up if this was the last request in the chain.
-					if ( isset( $this->fps[ $original_request_id ] ) ) {
-						fclose( $this->fps[ $original_request_id ] );
-					}
-					if ( isset( $this->output_paths[ $original_request_id ] ) ) {
-						if ( false === rename(
-							$this->output_paths[ $original_request_id ] . '.partial',
-							$this->output_paths[ $original_request_id ]
-						) ) {
-							// @TODO: Log an error.
-						}
-					}
-					unset( $this->partial_files[ $original_request_id ] );
-				}
-				break;
-		}
-
-		return true;
 	}
 }
