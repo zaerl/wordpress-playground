@@ -657,6 +657,7 @@ export ASYNCIFY_ONLY=$'"rc_dtor_func",\
 "_call_user_function_impl",\
 "_mysqlnd_run_command",\
 "_php_stream_copy_to_mem",\
+"_php_stream_copy_to_stream_ex",\
 "_php_stream_eof",\
 "_php_stream_fill_read_buffer",\
 "_php_stream_free",\
@@ -666,6 +667,7 @@ export ASYNCIFY_ONLY=$'"rc_dtor_func",\
 "_php_stream_set_option",\
 "_php_stream_write",\
 "_php_stream_xport_create",\
+"zif_stream_socket_enable_crypto",\
 "do_cli",\
 "do_cli_server",\
 "execute_ex",\
@@ -905,6 +907,7 @@ export ASYNCIFY_ONLY=$'"rc_dtor_func",\
 "php_zend_stream_closer",\
 "zend_fetch_class_by_name",\
 "zend_file_handle_dtor",\
+"zend_free_extra_named_params",\
 "zend_include_or_eval",\
 "zend_llist_del_element",\
 "zend_lookup_class_ex",\
