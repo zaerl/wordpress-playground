@@ -176,6 +176,14 @@ class WP_WXR_Reader implements Iterator {
 	private $entity_finished = false;
 
 	/**
+	 * The number of entities read so far.
+	 *
+	 * @since WP_VERSION
+	 * @var int
+	 */
+	private $entities_read_so_far = 0;
+
+	/**
 	 * The attributes from the last opening tag.
 	 *
 	 * @since WP_VERSION
@@ -834,6 +842,7 @@ class WP_WXR_Reader implements Iterator {
 			$this->entity_data['taxonomy'] = 'category';
 		}
 		$this->entity_finished = true;
+		++$this->entities_read_so_far;
 	}
 
 	/**
@@ -880,7 +889,7 @@ class WP_WXR_Reader implements Iterator {
 	}
 
 	public function key(): int {
-		return 0;
+		return $this->entities_read_so_far - 1;
 	}
 
 	public function valid(): bool {

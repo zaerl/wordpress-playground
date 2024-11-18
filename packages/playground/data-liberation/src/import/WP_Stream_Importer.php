@@ -162,14 +162,16 @@ class WP_Stream_Importer {
 			 *   might want to provide an "image not found" placeholder OR ignore the
 			 *   failure.
 			 */
-			$this->poll_attachments();
+			if(false === $this->poll_attachments()) {
+				return;
+			}
 			/**
 			 * @TODO: Update the download progress:
 			 * * After every downloaded file.
 			 * * For large files, every time a full megabyte is downloaded above 10MB.
 			 */
 			/**
-			 * @TODO: Advance the cursor to the oldest successful download. For example:
+			 * @TODO: Advance the cursor to the oldest finished download. For example:
 			 *
 			 * * We've started downloading files A, B, C, and D in this order.
 			 * * D is the first to finish. We don't do anything yet.
@@ -190,14 +192,19 @@ class WP_Stream_Importer {
 			$this->source_site_url = $data['option_value'];
 		} elseif ( 'post' === $entity->get_type() ) {
 			if ( isset( $data['post_type'] ) && $data['post_type'] === 'attachment' ) {
-				// Download media attachment entities.
-				$this->enqueue_attachment_download(
-					$data['attachment_url']
-				);
+				$this->enqueue_attachment_download($data['attachment_url'], null);
 			} elseif ( isset( $data['post_content'] ) ) {
-				$this->enqueue_attachments_referenced_in_post(
-					$data
-				);
+				$post = $data;
+				$p = new WP_Block_Markup_Url_Processor( $post['post_content'], $this->source_site_url );
+				while ( $p->next_url() ) {
+					if ( ! $this->url_processor_matched_asset_url( $p ) ) {
+						continue;
+					}
+					$this->enqueue_attachment_download(
+						$p->get_raw_url(),
+						$post['source_path'] ?? $post['slug'] ?? null
+					);
+				}
 			}
 		}
 		$this->entities_iterator->next();
@@ -330,35 +337,6 @@ class WP_Stream_Importer {
 		return $filename;
 	}
 
-	/**
-	 * Infers and enqueues the attachments URLs from the post content.
-	 *
-	 * Why not just emit the attachment URLs from WP_Markdown_Directory_Tree_Reader
-	 * as other entities?
-	 *
-	 * Whether it's Markdown, static HTML, or another static file format,
-	 * we'll need to recover the attachment URLs from the We can either
-	 * have a separate pipeline step for that, or burden every format
-	 * reader with reimplementing the same logic. So let's just keep it
-	 * separated.
-	 */
-	protected function enqueue_attachments_referenced_in_post( $post ) {
-		$p = new WP_Block_Markup_Url_Processor( $post['post_content'], $this->source_site_url );
-		while ( $p->next_url() ) {
-			if ( ! $this->url_processor_matched_asset_url( $p ) ) {
-				continue;
-			}
-
-			$enqueued = $this->enqueue_attachment_download(
-				$p->get_raw_url(),
-				$post['source_path'] ?? $post['slug'] ?? null
-			);
-			if ( false === $enqueued ) {
-				continue;
-			}
-		}
-	}
-
 	protected function enqueue_attachment_download( string $raw_url, $context_path = null ) {
 		$url            = $this->rewrite_attachment_url( $raw_url, $context_path );
 		$asset_filename = $this->new_asset_filename( $raw_url );
@@ -403,6 +381,7 @@ class WP_Stream_Importer {
 		// Meanwhile, we may either halt the content import, or provide a placeholder
 		// asset.
 		_doing_it_wrong( __METHOD__, "Failed to fetch attachment '$raw_url' from '$url'", '__WP_VERSION__' );
+		return false;
 	}
 
 	protected function rewrite_attachment_url( string $raw_url, $context_path = null ) {
@@ -450,9 +429,6 @@ class WP_Stream_Importer {
 	}
 
 	public function poll_attachments() {
-		if ( ! $this->client->await_next_event() ) {
-			return false;
-		}
 		$event   = $this->client->get_event();
 		$request = $this->client->get_request();
 		// The request object we get from the client may be a redirect.

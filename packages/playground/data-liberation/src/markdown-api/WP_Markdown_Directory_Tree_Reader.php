@@ -15,6 +15,7 @@ class WP_Markdown_Directory_Tree_Reader implements Iterator {
 	private $parent_ids    = array();
 	private $next_post_id;
 	private $is_finished = false;
+	private $entities_read_so_far = 0;
 
 	public function __construct( $root_dir, $first_post_id ) {
 		$this->file_visitor = new WP_File_Visitor( realpath( $root_dir ) );
@@ -38,6 +39,7 @@ class WP_Markdown_Directory_Tree_Reader implements Iterator {
 				}
 				$post_id = $this->next_post_id;
 				++$this->next_post_id;
+				++$this->entities_read_so_far;
 				$this->entity                  = $this->markdown_to_post_entity(
 					array(
 						'markdown' => $markdown,
@@ -66,6 +68,7 @@ class WP_Markdown_Directory_Tree_Reader implements Iterator {
 					)
 				);
 				++$this->next_post_id;
+				++$this->entities_read_so_far;
 				return true;
 			}
 
@@ -264,7 +267,7 @@ class WP_Markdown_Directory_Tree_Reader implements Iterator {
 	}
 
 	public function key(): int {
-		return 0;
+		return $this->entities_read_so_far - 1;
 	}
 
 	public function valid(): bool {
