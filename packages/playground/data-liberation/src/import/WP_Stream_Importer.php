@@ -1,4 +1,8 @@
 <?php
+
+use WordPress\AsyncHTTP\Client;
+use WordPress\AsyncHTTP\Request;
+
 /**
  * Idea:
  * * Stream-process the WXR file.
@@ -39,7 +43,6 @@ class WP_Stream_Importer {
 	 * }
 	 */
 	protected $options;
-	protected $downloader;
 
 	public static function create(
 		$entity_iterator_factory,
@@ -80,6 +83,50 @@ class WP_Stream_Importer {
 		}
 	}
 
+	const STATE_INITIAL          = '#initial';
+	const STATE_TOPOLOGICAL_SORT = '#topological_sort';
+	const STATE_FRONTLOAD_ASSETS = '#frontload_assets';
+	const STATE_IMPORT_ENTITIES  = '#import_entities';
+	const STATE_FINISHED         = '#finished';
+
+	/**
+	 * The current state of the import process.
+	 */
+	private $state = self::STATE_INITIAL;
+
+	/**
+	 * Iterator that streams entities to import.
+	 */
+	private $entities_iterator;
+
+	/**
+	 * The WordPress entity importer instance.
+	 * @TODO: Consider inlining the importer code into this class.
+	 *
+	 * @var WP_Entity_Importer
+	 */
+	private $importer;
+
+	public function next_step() {
+		switch ( $this->state ) {
+			case self::STATE_INITIAL:
+				$this->state = self::STATE_TOPOLOGICAL_SORT;
+				return true;
+			case self::STATE_TOPOLOGICAL_SORT:
+				// @TODO: Topologically sort the entities.
+				$this->state = self::STATE_FRONTLOAD_ASSETS;
+				return true;
+			case self::STATE_FRONTLOAD_ASSETS:
+				$this->frontload_assets_step();
+				return true;
+			case self::STATE_IMPORT_ENTITIES:
+				$this->import_entities_step();
+				return true;
+			case self::STATE_FINISHED:
+				return false;
+		}
+	}
+
 	/**
 	 * Downloads all the assets referenced in the imported entities.
 	 *
@@ -87,34 +134,23 @@ class WP_Stream_Importer {
 	 * before import_entities() so that every inserted post already has
 	 * all its attachments downloaded.
 	 */
-	public function frontload_assets() {
-		$factory          = $this->entity_iterator_factory;
-		$entities         = $factory();
-		$this->downloader = new WP_Attachment_Downloader( $this->options['uploads_path'] );
-		foreach ( $entities as $entity ) {
-			if ( $this->downloader->queue_full() ) {
-				$this->downloader->poll();
-				continue;
-			}
-
-			$data = $entity->get_data();
-			if ( 'site_option' === $entity->get_type() && $data['option_name'] === 'home' ) {
-				$this->source_site_url = $data['option_value'];
-			} elseif ( 'post' === $entity->get_type() ) {
-				if ( isset( $data['post_type'] ) && $data['post_type'] === 'attachment' ) {
-					// Download media attachment entities.
-					$this->enqueue_attachment_download(
-						$data['attachment_url']
-					);
-				} elseif ( isset( $data['post_content'] ) ) {
-					$this->enqueue_attachments_referenced_in_post(
-						$data
-					);
-				}
-			}
+	public function frontload_assets_step() {
+		if ( null === $this->entities_iterator ) {
+			$factory                 = $this->entity_iterator_factory;
+			$this->entities_iterator = $factory();
+			// @TODO: Seek to the last processed entity if we have a cursor.
+			$this->client = new \WordPress\AsyncHttp\Client();
 		}
 
-		while ( $this->downloader->poll() ) {
+		if ( ! $this->entities_iterator->valid() && ! $this->has_pending_requests() ) {
+			$this->state             = self::STATE_IMPORT_ENTITIES;
+			$this->client            = null;
+			$this->entities_iterator = null;
+			return;
+		}
+
+		$only_downloader_pending = ! $this->entities_iterator->valid() && $this->has_pending_requests();
+		if ( $this->download_queue_full() || $only_downloader_pending ) {
 			// Twiddle our thumbs as the downloader processes the requests...
 			/**
 			 * @TODO:
@@ -126,7 +162,45 @@ class WP_Stream_Importer {
 			 *   might want to provide an "image not found" placeholder OR ignore the
 			 *   failure.
 			 */
+			$this->poll_attachments();
+			/**
+			 * @TODO: Update the download progress:
+			 * * After every downloaded file.
+			 * * For large files, every time a full megabyte is downloaded above 10MB.
+			 */
+			/**
+			 * @TODO: Advance the cursor to the oldest successful download. For example:
+			 *
+			 * * We've started downloading files A, B, C, and D in this order.
+			 * * D is the first to finish. We don't do anything yet.
+			 * * A finishes next. We advance the cursor to A.
+			 * * C finishes next. We don't do anything.
+			 * * Then we pause.
+			 *
+			 * When we resume, we'll start where we left off, which is after A. The
+			 * downloader will enqueue B for download and will skip C and D since
+			 * the relevant files already exist in the filesystem.
+			 */
+			return;
 		}
+
+		$entity = $this->entities_iterator->current();
+		$data   = $entity->get_data();
+		if ( 'site_option' === $entity->get_type() && $data['option_name'] === 'home' ) {
+			$this->source_site_url = $data['option_value'];
+		} elseif ( 'post' === $entity->get_type() ) {
+			if ( isset( $data['post_type'] ) && $data['post_type'] === 'attachment' ) {
+				// Download media attachment entities.
+				$this->enqueue_attachment_download(
+					$data['attachment_url']
+				);
+			} elseif ( isset( $data['post_content'] ) ) {
+				$this->enqueue_attachments_referenced_in_post(
+					$data
+				);
+			}
+		}
+		$this->entities_iterator->next();
 	}
 
 	/**
@@ -136,55 +210,77 @@ class WP_Stream_Importer {
 	 *        large datasets, but maybe it could be a choice for
 	 *        the API consumer?
 	 */
-	public function import_entities() {
-		$importer = new WP_Entity_Importer();
-		$factory  = $this->entity_iterator_factory;
-		$entities = $factory();
-		foreach ( $entities as $entity ) {
-			$attachments = array();
-			// Rewrite the URLs in the post.
-			switch ( $entity->get_type() ) {
-				case 'post':
-					$data = $entity->get_data();
-					foreach ( array( 'guid', 'post_content', 'post_excerpt' ) as $key ) {
-						if ( ! isset( $data[ $key ] ) ) {
-							continue;
-						}
-						$p = new WP_Block_Markup_Url_Processor( $data[ $key ], $this->source_site_url );
-						while ( $p->next_url() ) {
-							if ( $this->url_processor_matched_asset_url( $p ) ) {
-								$filename      = $this->new_asset_filename( $p->get_raw_url() );
-								$new_asset_url = $this->options['uploads_url'] . '/' . $filename;
-								$p->replace_base_url( WP_URL::parse( $new_asset_url ) );
-								$attachments[] = $new_asset_url;
-								/**
-								 * @TODO: How would we know a specific image block refers to a specific
-								 *        attachment? We need to cross-correlate that to rewrite the URL.
-								 *        The image block could have query parameters, too, but presumably the
-								 *        path would be the same at least? What if the same file is referred
-								 *        to by two different URLs? e.g. assets.site.com and site.com/assets/ ?
-								 *        A few ideas: GUID, block attributes, fuzzy matching. Maybe a configurable
-								 *        strategy? And the API consumer would make the decision?
-								 */
-							} elseif ( $this->source_site_url &&
-								$p->get_parsed_url() &&
-								url_matches( $p->get_parsed_url(), $this->source_site_url )
-							) {
-								$p->replace_base_url( WP_URL::parse( $this->options['new_site_url'] ) );
-							} else {
-								// Ignore other URLs.
-							}
-						}
-						$data[ $key ] = $p->get_updated_html();
-					}
-					$entity->set_data( $data );
-					break;
-			}
-			$post_id = $importer->import_entity( $entity );
-			foreach ( $attachments as $filepath ) {
-				$importer->import_attachment( $filepath, $post_id );
-			}
+	public function import_entities_step() {
+		if ( null === $this->entities_iterator ) {
+			$factory                 = $this->entity_iterator_factory;
+			$this->entities_iterator = $factory();
+			$this->importer          = new WP_Entity_Importer();
+			// @TODO: Seek to the last processed entity if we have a cursor.
 		}
+
+		if ( ! $this->entities_iterator->valid() ) {
+			// We're done.
+			$this->state             = self::STATE_FINISHED;
+			$this->entities_iterator = null;
+			$this->importer          = null;
+			return;
+		}
+
+		$entity = $this->entities_iterator->current();
+
+		$attachments = array();
+		// Rewrite the URLs in the post.
+		switch ( $entity->get_type() ) {
+			case 'post':
+				$data = $entity->get_data();
+				foreach ( array( 'guid', 'post_content', 'post_excerpt' ) as $key ) {
+					if ( ! isset( $data[ $key ] ) ) {
+						continue;
+					}
+					$p = new WP_Block_Markup_Url_Processor( $data[ $key ], $this->source_site_url );
+					while ( $p->next_url() ) {
+						if ( $this->url_processor_matched_asset_url( $p ) ) {
+							$filename      = $this->new_asset_filename( $p->get_raw_url() );
+							$new_asset_url = $this->options['uploads_url'] . '/' . $filename;
+							$p->replace_base_url( WP_URL::parse( $new_asset_url ) );
+							$attachments[] = $new_asset_url;
+							/**
+							 * @TODO: How would we know a specific image block refers to a specific
+							 *        attachment? We need to cross-correlate that to rewrite the URL.
+							 *        The image block could have query parameters, too, but presumably the
+							 *        path would be the same at least? What if the same file is referred
+							 *        to by two different URLs? e.g. assets.site.com and site.com/assets/ ?
+							 *        A few ideas: GUID, block attributes, fuzzy matching. Maybe a configurable
+							 *        strategy? And the API consumer would make the decision?
+							 */
+						} elseif ( $this->source_site_url &&
+							$p->get_parsed_url() &&
+							url_matches( $p->get_parsed_url(), $this->source_site_url )
+						) {
+							$p->replace_base_url( WP_URL::parse( $this->options['new_site_url'] ) );
+						} else {
+							// Ignore other URLs.
+						}
+					}
+					$data[ $key ] = $p->get_updated_html();
+				}
+				$entity->set_data( $data );
+				break;
+		}
+
+		// @TODO: Monitor failures.
+		$post_id = $this->importer->import_entity( $entity );
+		foreach ( $attachments as $filepath ) {
+			// @TODO: Monitor failures.
+			$this->importer->import_attachment( $filepath, $post_id );
+		}
+
+		/**
+		 * @TODO: Advance the cursor to the next entity.
+		 * @TODO: Update the progress information.
+		 */
+
+		$this->entities_iterator->next();
 	}
 
 	/**
@@ -264,20 +360,49 @@ class WP_Stream_Importer {
 	}
 
 	protected function enqueue_attachment_download( string $raw_url, $context_path = null ) {
-		$new_filename     = $this->new_asset_filename( $raw_url );
-		$downloadable_url = $this->rewrite_attachment_url( $raw_url, $context_path );
-		$success          = $this->downloader->enqueue_if_not_exists(
-			$downloadable_url,
-			$new_filename
-		);
-		if ( false === $success ) {
-			// @TODO: Save the failure info somewhere so the user can review it later
-			//        and either retry or provide their own asset.
-			// Meanwhile, we may either halt the content import, or provide a placeholder
-			// asset.
-			_doing_it_wrong( __METHOD__, "Failed to fetch attachment '$raw_url' from '$downloadable_url'", '__WP_VERSION__' );
+		$url            = $this->rewrite_attachment_url( $raw_url, $context_path );
+		$asset_filename = $this->new_asset_filename( $raw_url );
+		$output_path    = $this->options['uploads_path'] . '/' . ltrim( $asset_filename, '/' );
+
+		if ( file_exists( $output_path ) ) {
+			// @TODO: Reconsider the return value. The enqueuing operation failed,
+			//        but overall already having a file seems like a success.
+			return true;
 		}
-		return $success;
+
+		$output_dir = dirname( $output_path );
+		if ( ! file_exists( $output_dir ) ) {
+			// @TODO: think through the chmod of the created directory.
+			mkdir( $output_dir, 0777, true );
+		}
+
+		$protocol = parse_url( $url, PHP_URL_SCHEME );
+		if ( null === $protocol ) {
+			return false;
+		}
+
+		switch ( $protocol ) {
+			case 'file':
+				$local_path = parse_url( $url, PHP_URL_PATH );
+				if ( false === $local_path ) {
+					return false;
+				}
+				// Just copy the file over.
+				// @TODO: think through the chmod of the created file.
+				return copy( $local_path, $output_path );
+			case 'http':
+			case 'https':
+				$request                            = new Request( $url );
+				$this->output_paths[ $request->id ] = $output_path;
+				$this->client->enqueue( $request );
+				return true;
+		}
+
+		// @TODO: Save the failure info somewhere so the user can review it later
+		//        and either retry or provide their own asset.
+		// Meanwhile, we may either halt the content import, or provide a placeholder
+		// asset.
+		_doing_it_wrong( __METHOD__, "Failed to fetch attachment '$raw_url' from '$url'", '__WP_VERSION__' );
 	}
 
 	protected function rewrite_attachment_url( string $raw_url, $context_path = null ) {
@@ -309,5 +434,80 @@ class WP_Stream_Importer {
 			$p->get_inspected_attribute_name() === 'src' &&
 			( ! $this->source_site_url || url_matches( $p->get_parsed_url(), $this->source_site_url ) )
 		);
+	}
+
+	private $client;
+	private $fps           = array();
+	private $partial_files = array();
+	private $output_paths  = array();
+
+	private function has_pending_requests() {
+		return count( $this->client->get_active_requests() ) > 0;
+	}
+
+	public function download_queue_full() {
+		return count( $this->client->get_active_requests() ) >= 10;
+	}
+
+	public function poll_attachments() {
+		if ( ! $this->client->await_next_event() ) {
+			return false;
+		}
+		$event   = $this->client->get_event();
+		$request = $this->client->get_request();
+		// The request object we get from the client may be a redirect.
+		// Let's keep referring to the original request.
+		$original_request_id = $request->original_request()->id;
+
+		switch ( $event ) {
+			case Client::EVENT_GOT_HEADERS:
+				if ( ! $request->is_redirected() ) {
+					if ( file_exists( $this->output_paths[ $original_request_id ] . '.partial' ) ) {
+						unlink( $this->output_paths[ $original_request_id ] . '.partial' );
+					}
+					$this->fps[ $original_request_id ] = fopen( $this->output_paths[ $original_request_id ] . '.partial', 'wb' );
+					if ( false === $this->fps[ $original_request_id ] ) {
+						// @TODO: Log an error.
+					}
+				}
+				break;
+			case Client::EVENT_BODY_CHUNK_AVAILABLE:
+				$chunk = $this->client->get_response_body_chunk();
+				if ( false === fwrite( $this->fps[ $original_request_id ], $chunk ) ) {
+					// @TODO: Log an error.
+				}
+				break;
+			case Client::EVENT_FAILED:
+				if ( isset( $this->fps[ $original_request_id ] ) ) {
+					fclose( $this->fps[ $original_request_id ] );
+				}
+				if ( isset( $this->partial_files[ $original_request_id ] ) ) {
+					$partial_file = $this->options['uploads_path'] . '/' . $this->output_paths[ $original_request_id ] . '.partial';
+					if ( file_exists( $partial_file ) ) {
+						unlink( $partial_file );
+					}
+				}
+				unset( $this->output_paths[ $original_request_id ] );
+				break;
+			case Client::EVENT_FINISHED:
+				if ( ! $request->is_redirected() ) {
+					// Only clean up if this was the last request in the chain.
+					if ( isset( $this->fps[ $original_request_id ] ) ) {
+						fclose( $this->fps[ $original_request_id ] );
+					}
+					if ( isset( $this->output_paths[ $original_request_id ] ) ) {
+						if ( false === rename(
+							$this->output_paths[ $original_request_id ] . '.partial',
+							$this->output_paths[ $original_request_id ]
+						) ) {
+							// @TODO: Log an error.
+						}
+					}
+					unset( $this->partial_files[ $original_request_id ] );
+				}
+				break;
+		}
+
+		return true;
 	}
 }

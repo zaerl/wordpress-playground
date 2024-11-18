@@ -353,20 +353,9 @@ add_action('data_liberation_process_import', 'data_liberation_process_import');
 
 function data_liberation_import_step($import) {
     $importer = data_liberation_create_importer($import);
-    // @TODO: Save the last importer state so we can resume it later if interrupted.
-    update_option('data_liberation_import_progress', [
-        'status' => 'Downloading static assets...',
-        'current' => 0,
-        'total' => 0
-    ]);
-    $importer->frontload_assets();
-    // @TODO: Keep track of multiple progress dimensions – posts, assets, categories, etc.
-    update_option('data_liberation_import_progress', [
-        'status' => 'Importing posts...',
-        'current' => 0,
-        'total' => 0
-    ]);
-    $importer->import_entities();
+    while($importer->next_step()) {
+        // ...Twiddle our thumbs...
+    }
     delete_option('data_liberation_active_import');
     // @TODO: Do not echo things. Append to an import log where we can retrace the steps.
     //        Also, store specific import events in the database so the user can react and

@@ -51,7 +51,6 @@ require_once __DIR__ . '/src/import/WP_Entity_Importer.php';
 require_once __DIR__ . '/src/import/WP_File_Visitor.php';
 require_once __DIR__ . '/src/import/WP_File_Visitor_Event.php';
 require_once __DIR__ . '/src/import/WP_Imported_Entity.php';
-require_once __DIR__ . '/src/import/WP_Attachment_Downloader.php';
 require_once __DIR__ . '/src/import/WP_Stream_Importer.php';
 require_once __DIR__ . '/src/import/WP_Markdown_Importer.php';
 
