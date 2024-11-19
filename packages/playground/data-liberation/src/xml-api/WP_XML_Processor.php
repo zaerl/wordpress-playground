@@ -387,7 +387,7 @@ class WP_XML_Processor {
 	protected $expecting_more_input = true;
 
 	/**
-	 * How many bytes from the original XML document have been read and parsed.
+	 * How many bytes from the current XML chunk have been read and parsed.
 	 *
 	 * This value points to the latest byte offset in the input document which
 	 * has been already parsed. It is the internal cursor for the Tag Processor
@@ -405,7 +405,7 @@ class WP_XML_Processor {
 	 * @since WP_VERSION
 	 * @var int
 	 */
-	public $bytes_already_forgotten = 0;
+	public $upstream_bytes_forgotten = 0;
 
 	/**
 	 * Byte offset in input document where current token starts.
@@ -676,8 +676,8 @@ class WP_XML_Processor {
 	 */
 	public function pause() {
 		return array(
-			'token_byte_offset_in_the_input_stream' => $this->bytes_already_forgotten + $this->token_starts_at,
-			'bytes_already_forgotten' => $this->bytes_already_forgotten,
+			'token_starts_at_in_current_chunk' => $this->token_starts_at,
+			'upstream_bytes_forgotten' => $this->upstream_bytes_forgotten,
 			'parser_context' => $this->parser_context,
 			'stack_of_open_elements' => $this->stack_of_open_elements,
 			'expecting_more_input' => $this->expecting_more_input,
@@ -689,8 +689,8 @@ class WP_XML_Processor {
 	 * – Validate the paused state, return false if it's invalid.
 	 */
 	public function resume( $paused_state ) {
-		$this->bytes_already_parsed    = 0;
-		$this->bytes_already_forgotten = $paused_state['bytes_already_forgotten'];
+		$this->bytes_already_parsed    = $paused_state['token_starts_at_in_current_chunk'];
+		$this->upstream_bytes_forgotten = $paused_state['upstream_bytes_forgotten'];
 		$this->stack_of_open_elements  = $paused_state['stack_of_open_elements'];
 		$this->parser_context          = $paused_state['parser_context'];
 		$this->expecting_more_input    = $paused_state['expecting_more_input'];
@@ -796,7 +796,7 @@ class WP_XML_Processor {
 		if ( null !== $this->text_starts_at ) {
 			$this->text_starts_at -= $unreferenced_bytes;
 		}
-		$this->bytes_already_forgotten += $unreferenced_bytes;
+		$this->upstream_bytes_forgotten += $unreferenced_bytes;
 		return $flushed_bytes;
 	}
 
@@ -1560,7 +1560,7 @@ class WP_XML_Processor {
 			 */
 			if (
 				0 === $at &&
-				0 === $this->bytes_already_forgotten &&
+				0 === $this->upstream_bytes_forgotten &&
 				! $this->is_closing_tag &&
 				'?' === $xml[ $at + 1 ] &&
 				'x' === $xml[ $at + 2 ] &&
@@ -3069,7 +3069,15 @@ class WP_XML_Processor {
 				return true;
 			default:
 				$this->last_error = self::ERROR_SYNTAX;
-				_doing_it_wrong( __METHOD__, 'Unexpected token type in element stage.', 'WP_VERSION' );
+				_doing_it_wrong(
+					__METHOD__,
+					sprintf(
+						// translators: %1$s is the unexpected token type.
+						__( 'Unexpected token type "%1$s" in element stage.', 'data-liberation' ),
+						$this->get_token_type()
+					),
+					'WP_VERSION'
+				);
 				return false;
 		}
 	}

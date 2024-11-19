@@ -25,6 +25,44 @@ add_filter('wp_kses_uri_attributes', function() {
     return [];
 });
 
+/**
+ * Development debug code to run the import manually.
+ * @TODO: Remove this in favor of a CLI command.
+ */
+add_action('init', function() {
+    echo '<plaintext>';
+    $wxr_path = __DIR__ . '/tests/fixtures/wxr-simple.xml';
+    $entity_iterator_factory = function() use ($wxr_path) {
+        $wxr = new WP_WXR_Reader();
+        $wxr->connect_upstream(new WP_File_Reader($wxr_path));
+
+        return $wxr;
+    };
+    $importer = WP_Stream_Importer::create(
+        $entity_iterator_factory
+    );
+    $importer->next_step();
+    $importer->next_step();
+    $importer->next_step();
+    $importer->next_step();
+    $importer->next_step();
+    $importer->next_step();
+    $paused_importer_state = $importer->pause();
+
+    $importer2 = WP_Stream_Importer::create(
+        $entity_iterator_factory
+    );
+    $importer2->resume($paused_importer_state);
+    $importer2->next_step();
+    $importer2->next_step();
+    $importer2->next_step();
+    // $importer2->next_step();
+
+    // var_dump($importer2);
+
+    die("YAY");
+});
+
 // Register admin menu
 add_action('admin_menu', function() {
     add_menu_page(

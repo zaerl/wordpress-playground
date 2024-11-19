@@ -349,8 +349,16 @@ class WP_WXR_Reader implements Iterator {
 			//        this to, e.g., remote HTTP byte sources.
 			$upstream_state['offset_in_file'] = $this->entity_byte_offset;
 		}
+		// @TODO: I don't like messing with internals of $paused_state. How else
+		//        can we do this? We need more than just an offset to also restore
+		//        XML breadcrumbs and the parsing context. Perhaps the cursor could
+		//        be a class with a method such as "override_byte_offset(int $offset)"?
+		//        Or resume() could have an optional argument?
+		$xml_state = $this->xml->pause();
+		$xml_state['token_starts_at_in_current_chunk'] = 0;
+		$xml_state['upstream_bytes_forgotten'] = $this->entity_byte_offset;
 		return array(
-			'xml' => $this->xml->pause(),
+			'xml' => $xml_state,
 			'upstream' => $upstream_state,
 			'last_post_id' => $this->last_post_id,
 			'last_comment_id' => $this->last_comment_id,
@@ -369,6 +377,7 @@ class WP_WXR_Reader implements Iterator {
 		$this->xml->resume( $paused_state['xml'] );
 		$this->last_post_id    = $paused_state['last_post_id'];
 		$this->last_comment_id = $paused_state['last_comment_id'];
+		// @TODO: Should resume() call next_step() or just prepare the state?
 		$this->next_entity();
 	}
 
@@ -817,7 +826,10 @@ class WP_WXR_Reader implements Iterator {
 	 */
 	private function get_current_byte_offset() {
 		$paused_xml_state = $this->xml->pause();
-		return $paused_xml_state['token_byte_offset_in_the_input_stream'];
+		return (
+			$paused_xml_state['token_starts_at_in_current_chunk'] +
+			$paused_xml_state['upstream_bytes_forgotten']
+		);
 	}
 
 	/**
@@ -888,8 +900,8 @@ class WP_WXR_Reader implements Iterator {
 		$this->last_next_result = $this->next_entity();
 	}
 
-	public function key(): int {
-		return $this->entities_read_so_far - 1;
+	public function key(): string {
+		return sha1(json_encode($this->pause()));
 	}
 
 	public function valid(): bool {
