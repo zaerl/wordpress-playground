@@ -297,7 +297,9 @@ class WP_Stream_Importer {
 			$factory                 = $this->entity_iterator_factory;
 			$this->entities_iterator = $factory();
 			$this->importer          = new WP_Entity_Importer();
-			// @TODO: Seek to the last processed entity if we have a cursor.
+			if( $this->entities_cursor ) {
+				$this->entities_iterator->resume( $this->entities_cursor );
+			}
 		}
 
 		if ( ! $this->entities_iterator->valid() ) {
