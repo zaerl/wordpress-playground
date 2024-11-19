@@ -129,9 +129,7 @@ class WP_Stream_Importer {
 	}
 
 	private $downloader;
-	private $entity_cursors   = array();
-	private $entity_to_urls   = array();
-	private $urls_to_entities = array();
+	private $active_downloads = array();
 
 	/**
 	 * Downloads all the assets referenced in the imported entities.
@@ -148,46 +146,36 @@ class WP_Stream_Importer {
 			$this->downloader = new WP_Attachment_Downloader( $this->options );
 		}
 
+		/**
+		 * Keep track of active downloads for pausing and resuming purposes.
+		 */
 		while ( $this->downloader->next_event() ) {
 			$event = $this->downloader->get_event();
 			switch ( $event->type ) {
+				case WP_Attachment_Downloader_Event::STARTED:
+					if( ! isset( $this->active_downloads[ $event->url ] ) ) {
+						$this->active_downloads[ $event->url ] = array();
+					}
+					$this->active_downloads[ $event->url ][ $event->target_path ] = true;
+					break;
 				case WP_Attachment_Downloader_Event::SUCCESS:
 				case WP_Attachment_Downloader_Event::FAILURE:
-					$this->pop_downloaded_url( $event->url );
+					if( ! isset( $this->active_downloads[ $event->url ] ) ) {
+						continue;
+					}
+					unset( $this->active_downloads[ $event->url ][ $event->target_path ] );
+					if ( empty( $this->active_downloads[ $event->url ] ) ) {
+						unset( $this->active_downloads[ $event->url ] );
+					}
 					break;
 			}
-		}
-
-		/**
-		 * Advance the cursor to the oldest finished download. For example:
-		 *
-		 * * We've started downloading files A, B, C, and D in this order.
-		 * * D is the first to finish. We don't do anything yet.
-		 * * A finishes next. We advance the cursor to A.
-		 * * C finishes next. We don't do anything.
-		 * * Then we pause.
-		 *
-		 * When we resume, we'll start where we left off, which is after A. The
-		 * downloader will enqueue B for download and will skip C and D since
-		 * the relevant files already exist in the filesystem.
-		 */
-		while ( count( $this->entity_to_urls ) > 0 ) {
-			$oldest_entity_key = key( $this->entity_to_urls );
-			if ( null === $oldest_entity_key ) {
-				break;
-			}
-			if ( ! empty( $this->entity_to_urls[ $oldest_entity_key ] ) ) {
-				break;
-			}
-			$this->entities_iterator_cursor = $this->entity_cursors[ $oldest_entity_key ];
-			unset( $this->entity_cursors[ $oldest_entity_key ] );
-			unset( $this->entity_to_urls[ $oldest_entity_key ] );
 		}
 
 		// We're done if all the entities are processed and all the downloads are finished.
 		if ( ! $this->entities_iterator->valid() && ! $this->downloader->has_pending_requests() ) {
 			$this->state             = self::STATE_IMPORT_ENTITIES;
 			$this->downloader        = null;
+			$this->active_downloads  = array();
 			$this->entities_iterator = null;
 			return false;
 		}
@@ -215,18 +203,6 @@ class WP_Stream_Importer {
 		 * Identify the static assets referenced in the current entity
 		 * and enqueue them for download.
 		 */
-		$entity_key = $this->entities_iterator->key();
-
-		/**
-		 * Store the cursor for the next entity. We'll advance later on
-		 * when all its downloads are done.
-		 *
-		 * @TODO: Cleanup or skip over stale cursors. When processing slow downloads,
-		 *        we could easily end up with millions of entries in $this->entity_cursors.
-		 */
-		$this->entity_to_urls[ $entity_key ] = array();
-		$this->entity_cursors[ $entity_key ] = $this->entities_iterator->pause();
-
 		$entity = $this->entities_iterator->current();
 		$data   = $entity->get_data();
 		switch ( $entity->get_type() ) {
@@ -253,6 +229,11 @@ class WP_Stream_Importer {
 				}
 				break;
 		}
+
+		/**
+		 * @TODO: Update the progress information.
+		 * @TODO: Save the freshly requested URLs to the cursor.
+		 */
 
 		// Move on to the next entity.
 		$this->entities_iterator->next();
@@ -345,34 +326,7 @@ class WP_Stream_Importer {
 		$asset_filename = $this->new_asset_filename( $raw_url );
 		$output_path    = $this->options['uploads_path'] . '/' . ltrim( $asset_filename, '/' );
 
-		$this->push_downloaded_url( $url, $this->entities_iterator->key() );
 		return $this->downloader->enqueue_if_not_exists( $url, $output_path );
-	}
-
-	/**
-	 * For cursor advancement purposes.
-	 * Marks an URL as being downloaded in relation to the current entity.
-	 */
-	protected function push_downloaded_url( string $url, $entity_key ) {
-		if ( ! isset( $this->entity_to_urls[ $entity_key ] ) ) {
-			$this->entity_to_urls[ $entity_key ] = array();
-		}
-		if ( ! isset( $this->urls_to_entities[ $url ] ) ) {
-			$this->urls_to_entities[ $url ] = array();
-		}
-		$this->entity_to_urls[ $entity_key ][ $url ]   = true;
-		$this->urls_to_entities[ $url ][ $entity_key ] = true;
-	}
-
-	protected function pop_downloaded_url( string $url ) {
-		$entity_keys = array_keys( $this->urls_to_entities[ $url ] );
-		foreach ( $entity_keys as $entity_key ) {
-			unset( $this->urls_to_entities[ $url ][ $entity_key ] );
-			unset( $this->entity_to_urls[ $entity_key ][ $url ] );
-		}
-		if ( empty( $this->urls_to_entities[ $url ] ) ) {
-			unset( $this->urls_to_entities[ $url ] );
-		}
 	}
 
 	/**
