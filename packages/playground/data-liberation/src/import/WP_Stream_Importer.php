@@ -357,10 +357,9 @@ class WP_Stream_Importer {
 		}
 
 		/**
-		 * @TODO: Advance the cursor to the next entity.
 		 * @TODO: Update the progress information.
 		 */
-
+		$this->entities_cursor = $this->entities_iterator->pause();
 		$this->entities_iterator->next();
 	}
 
