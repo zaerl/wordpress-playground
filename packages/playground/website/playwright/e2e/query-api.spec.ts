@@ -106,6 +106,14 @@ test('should not login the user in if the login query parameter is set to no', a
 	});
 });
 
+test('should translate WP-admin to Spanish using the language query parameter', async ({
+	website,
+	wordpress,
+}) => {
+	await website.goto('./?language=es_ES&url=/wp-admin/');
+	await expect(wordpress.locator('body')).toContainText('Escritorio');
+});
+
 /**
  * There is no reason to remove encoded control characters from the URL.
  * For example, the html-api-debugger accepts markup with newlines encoded
