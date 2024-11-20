@@ -1,14 +1,14 @@
 #!/bin/bash
 #
-# A script that accepts a WXR XML file and imports it into a WordPress site
+# A script that accepts a folder and imports all WXR files into a WordPress site
 #
 # Usage:
-#    ./import-wxr.sh <filename>
+#    ./import-wxr.sh <folder-name>
 #
 
 # Display help message
 show_help() {
-	echo "Usage: $0 [-h|--help] <filename>"
+	echo "Usage: $0 [-h|--help] <folder-name>"
 	echo "Options:"
 	echo "  -h, --help Show this help message"
 }
@@ -43,6 +43,6 @@ if [ -d "$1" ]; then
 		--mount=$1:/wordpress/wp-content/uploads/import-wxr \
 		--blueprint=./blueprint-import-wxr.json
 else
-	echo "Error: File '$1' does not exist"
+	echo "Error: Folder '$1' does not exist"
 	exit 1
 fi
