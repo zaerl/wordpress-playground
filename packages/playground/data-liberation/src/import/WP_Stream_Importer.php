@@ -13,8 +13,9 @@ use WordPress\AsyncHTTP\Request;
  *   too slow for large datasets.
  *
  * @TODO:
- * * Re-entrant import via storing state on error, pausing, and resuming.
- * * Idempotent import.
+ * ✅ Re-entrant import
+ * * Log errors for the user to decide what to do.
+ * * Log progress information.
  * * Error out if `source_site_url` is not set by the time we're processing
  *   the first encountered URL.
  * * Disable anything remotely related to KSES during the import. KSES
@@ -32,7 +33,7 @@ class WP_Stream_Importer {
 	/**
 	 * Populated from the WXR file's <wp:base_blog_url> tag.
 	 */
-	protected $source_site_url;
+	private $source_site_url;
 	private $entity_iterator_factory;
 	/**
 	 * @param array|string|null $query {
@@ -42,50 +43,70 @@ class WP_Stream_Importer {
 	 *                                      after the import. E.g. http://127.0.0.1:9400/wp-content/uploads/
 	 * }
 	 */
-	protected $options;
+	private $options;
 
-	const STATE_INITIAL          = '#initial';
-	const STATE_TOPOLOGICAL_SORT = '#topological_sort';
-	const STATE_FRONTLOAD_ASSETS = '#frontload_assets';
-	const STATE_IMPORT_ENTITIES  = '#import_entities';
-	const STATE_FINISHED         = '#finished';
+	const STAGE_INITIAL          = '#initial';
+	const STAGE_TOPOLOGICAL_SORT = '#topological_sort';
+	const STAGE_FRONTLOAD_ASSETS = '#frontload_assets';
+	const STAGE_IMPORT_ENTITIES  = '#import_entities';
+	const STAGE_FINISHED         = '#finished';
 
 	/**
 	 * The current state of the import process.
+	 * @var string
 	 */
-	private $state = self::STATE_INITIAL;
+	private $stage = self::STAGE_INITIAL;
 
 	/**
 	 * Iterator that streams entities to import.
 	 */
 	private $entities_iterator;
-	private $frontloading_state = array();
-	public $entities_cursor;
+	private $resume_at_entity;
+	/**
+	 * A map of currently downloaded resources for each entity in
+	 * the following format:
+	 *
+	 * [$entity_cursor => [$resource_id => true]]
+	 *
+	 * @var array<string,array<string,bool>>
+	 */
+	private $active_downloads = array();
 	private $downloader;
 
 	public static function create(
 		$entity_iterator_factory,
-		$options = array()
+		$options = array(),
+		$cursor = null
 	) {
-		$options = static::parse_options( $options );
-		return new WP_Stream_Importer( $entity_iterator_factory, $options );
+		$options  = static::parse_options( $options );
+		$importer = new WP_Stream_Importer( $entity_iterator_factory, $options );
+		if ( null !== $cursor && true !== $importer->initialize_from_cursor( $cursor ) ) {
+			return false;
+		}
+		return $importer;
 	}
 
-	public function pause() {
-		return array(
-			'state' => $this->state,
-			'entities_cursor' => $this->entities_cursor,
+	public function get_reentrancy_cursor() {
+		return json_encode(
+			array(
+				'state' => $this->stage,
+				'resume_at_entity' => $this->resume_at_entity,
+			)
 		);
 	}
 
-	public function resume( $paused_state ) {
-		$this->state           = $paused_state['state'];
-		$this->entities_cursor = $paused_state['entities_cursor'];
-		// @TODO: Should resume() call next_step() or just prepare the state?
-		$this->next_step();
+	private function initialize_from_cursor( $cursor ) {
+		$cursor = json_decode( $cursor, true );
+		if ( ! is_array( $cursor ) ) {
+			_doing_it_wrong( __METHOD__, 'Cannot resume an importer with a non-array cursor.', '1.0.0' );
+			return false;
+		}
+		$this->stage            = $cursor['state'];
+		$this->resume_at_entity = $cursor['resume_at_entity'];
+		return true;
 	}
 
-	protected static function parse_options( $options ) {
+	private static function parse_options( $options ) {
 		if ( ! isset( $options['new_site_url'] ) ) {
 			$options['new_site_url'] = get_site_url();
 		}
@@ -105,7 +126,7 @@ class WP_Stream_Importer {
 		return $options;
 	}
 
-	protected function __construct(
+	private function __construct(
 		$entity_iterator_factory,
 		$options = array()
 	) {
@@ -125,60 +146,60 @@ class WP_Stream_Importer {
 	private $importer;
 
 	public function next_step() {
-		switch ( $this->state ) {
-			case self::STATE_INITIAL:
-				$this->state = self::STATE_TOPOLOGICAL_SORT;
+		switch ( $this->stage ) {
+			case self::STAGE_INITIAL:
+				$this->stage = self::STAGE_TOPOLOGICAL_SORT;
 				return true;
-			case self::STATE_TOPOLOGICAL_SORT:
+			case self::STAGE_TOPOLOGICAL_SORT:
 				// @TODO: Topologically sort the entities.
-				$this->state = self::STATE_FRONTLOAD_ASSETS;
+				$this->stage = self::STAGE_FRONTLOAD_ASSETS;
 				return true;
-			case self::STATE_FRONTLOAD_ASSETS:
-				$this->frontload_assets_step();
+			case self::STAGE_FRONTLOAD_ASSETS:
+				$this->next_frontloading_step();
 				return true;
-			case self::STATE_IMPORT_ENTITIES:
-				$this->import_entities_step();
+			case self::STAGE_IMPORT_ENTITIES:
+				$this->import_next_entity();
 				return true;
-			case self::STATE_FINISHED:
+			case self::STAGE_FINISHED:
 				return false;
 		}
 	}
 
-	public function advance_frontloading_cursor() {
-		/**
-		 * Advance the cursor to the oldest finished download. For example:
-		 *
-		 * * We've started downloading files A, B, C, and D in this order.
-		 * * D is the first to finish. We don't do anything yet.
-		 * * A finishes next. We advance the cursor to A.
-		 * * C finishes next. We don't do anything.
-		 * * Then we pause.
-		 *
-		 * When we resume, we'll start where we left off, which is after A. The
-		 * downloader will enqueue B for download and will skip C and D since
-		 * the relevant files already exist in the filesystem.
-		 */
+	/**
+	 * Advance the cursor to the oldest finished download. For example:
+	 *
+	 * * We've started downloading files A, B, C, and D in this order.
+	 * * D is the first to finish. We don't do anything yet.
+	 * * A finishes next. We advance the cursor to A.
+	 * * C finishes next. We don't do anything.
+	 * * Then we pause.
+	 *
+	 * When we resume, we'll start where we left off, which is after A. The
+	 * downloader will enqueue B for download and will skip C and D since
+	 * the relevant files already exist in the filesystem.
+	 */
+	private function frontloading_advance_reentrancy_cursor() {
 		while ( $this->downloader->next_event() ) {
 			$event = $this->downloader->get_event();
 			switch ( $event->type ) {
 				case WP_Attachment_Downloader_Event::SUCCESS:
 				case WP_Attachment_Downloader_Event::FAILURE:
-					foreach ( $this->frontloading_state as $state ) {
-						$resource_id = $event->resource_id;
-						unset( $state['active_downloads'][ $resource_id ] );
+					foreach ( array_keys( $this->active_downloads ) as $entity_cursor ) {
+						unset( $this->active_downloads[ $entity_cursor ][ $event->resource_id ] );
 					}
 					break;
 			}
 		}
 
-		while ( count( $this->frontloading_state ) > 0 ) {
-			$oldest_download_key = key( $this->frontloading_state );
-			if ( ! empty( $this->frontloading_state[ $oldest_download_key ]['active_downloads'] ) ) {
+		while ( count( $this->active_downloads ) > 0 ) {
+			$oldest_download_cursor = key( $this->active_downloads );
+			$downloads_completed    = empty( $this->active_downloads[ $oldest_download_cursor ] );
+			if ( ! $downloads_completed ) {
 				break;
 			}
 			// Advance the cursor to the next entity.
-			$this->entities_cursor = $this->frontloading_state[ $oldest_download_key ]['cursor'];
-			unset( $this->frontloading_state[ $oldest_download_key ] );
+			$this->resume_at_entity = $oldest_download_cursor;
+			unset( $this->active_downloads[ $oldest_download_cursor ] );
 		}
 	}
 
@@ -189,28 +210,26 @@ class WP_Stream_Importer {
 	 * before import_entities() so that every inserted post already has
 	 * all its attachments downloaded.
 	 */
-	public function frontload_assets_step() {
+	private function next_frontloading_step() {
 		if ( null === $this->entities_iterator ) {
 			$factory                 = $this->entity_iterator_factory;
-			$this->entities_iterator = $factory();
-			if ( $this->entities_cursor ) {
-				$this->entities_iterator->resume( $this->entities_cursor );
-			}
-			$this->downloader = new WP_Attachment_Downloader( $this->options );
+			$this->entities_iterator = $factory( $this->resume_at_entity );
+			$this->downloader        = new WP_Attachment_Downloader( $this->options );
 		}
 
-		$this->advance_frontloading_cursor();
+		$this->frontloading_advance_reentrancy_cursor();
 
 		// We're done if all the entities are processed and all the downloads are finished.
 		if ( ! $this->entities_iterator->valid() && ! $this->downloader->has_pending_requests() ) {
 			// This is an assertion to make double sure we're emptying the state queue.
-			if ( ! empty( $this->frontloading_state ) ) {
+			if ( ! empty( $this->active_downloads ) ) {
 				_doing_it_wrong( __METHOD__, 'Frontloading queue is not empty.', '1.0' );
 			}
-			$this->state              = self::STATE_IMPORT_ENTITIES;
-			$this->downloader         = null;
-			$this->frontloading_state = array();
-			$this->entities_iterator  = null;
+			$this->stage             = self::STAGE_IMPORT_ENTITIES;
+			$this->downloader        = null;
+			$this->active_downloads  = array();
+			$this->entities_iterator = null;
+			$this->resume_at_entity  = null;
 			return false;
 		}
 
@@ -237,15 +256,9 @@ class WP_Stream_Importer {
 		 * Identify the static assets referenced in the current entity
 		 * and enqueue them for download.
 		 */
-		$entity                                  = $this->entities_iterator->current();
-		$entity_key                              = $this->entities_iterator->key();
-		$this->frontloading_state[ $entity_key ] = array(
-			'key' => $entity_key,
-			// @TODO: Consider making key() and pause() the same thing.
-			//        Then seek() and resume() would be the same, too!
-			'cursor' => $this->entities_iterator->pause(),
-			'active_downloads' => array(),
-		);
+		$entity                            = $this->entities_iterator->current();
+		$cursor                            = $this->entities_iterator->get_reentrancy_cursor();
+		$this->active_downloads[ $cursor ] = array();
 
 		$data = $entity->get_data();
 		switch ( $entity->get_type() ) {
@@ -281,7 +294,7 @@ class WP_Stream_Importer {
 		// Move on to the next entity.
 		$this->entities_iterator->next();
 
-		$this->advance_frontloading_cursor();
+		$this->frontloading_advance_reentrancy_cursor();
 		return true;
 	}
 
@@ -292,19 +305,16 @@ class WP_Stream_Importer {
 	 *        large datasets, but maybe it could be a choice for
 	 *        the API consumer?
 	 */
-	public function import_entities_step() {
+	private function import_next_entity() {
 		if ( null === $this->entities_iterator ) {
 			$factory                 = $this->entity_iterator_factory;
-			$this->entities_iterator = $factory();
+			$this->entities_iterator = $factory( $this->resume_at_entity );
 			$this->importer          = new WP_Entity_Importer();
-			if ( $this->entities_cursor ) {
-				$this->entities_iterator->resume( $this->entities_cursor );
-			}
 		}
 
 		if ( ! $this->entities_iterator->valid() ) {
 			// We're done.
-			$this->state             = self::STATE_FINISHED;
+			$this->stage             = self::STAGE_FINISHED;
 			$this->entities_iterator = null;
 			$this->importer          = null;
 			return;
@@ -361,20 +371,20 @@ class WP_Stream_Importer {
 		/**
 		 * @TODO: Update the progress information.
 		 */
-		$this->entities_cursor = $this->entities_iterator->pause();
+		$this->resume_at_entity = $this->entities_iterator->get_reentrancy_cursor();
 		$this->entities_iterator->next();
 	}
 
-	protected function enqueue_attachment_download( string $raw_url, $context_path = null ) {
+	private function enqueue_attachment_download( string $raw_url, $context_path = null ) {
 		$url            = $this->rewrite_attachment_url( $raw_url, $context_path );
 		$asset_filename = $this->new_asset_filename( $raw_url );
 		$output_path    = $this->options['uploads_path'] . '/' . ltrim( $asset_filename, '/' );
 
 		$enqueued = $this->downloader->enqueue_if_not_exists( $url, $output_path );
 		if ( $enqueued ) {
-			$resource_id = $this->downloader->get_last_enqueued_resource_id();
-			$entity_key  = $this->entities_iterator->key();
-			$this->frontloading_state[ $entity_key ]['active_downloads'][ $resource_id ] = true;
+			$resource_id   = $this->downloader->get_last_enqueued_resource_id();
+			$entity_cursor = $this->entities_iterator->get_reentrancy_cursor();
+			$this->active_downloads[ $entity_cursor ][ $resource_id ] = true;
 		}
 		return $enqueued;
 	}
@@ -426,7 +436,7 @@ class WP_Stream_Importer {
 		return $filename;
 	}
 
-	protected function rewrite_attachment_url( string $raw_url, $context_path = null ) {
+	private function rewrite_attachment_url( string $raw_url, $context_path = null ) {
 		if ( WP_URL::can_parse( $raw_url ) ) {
 			// Absolute URL, nothing to do.
 			return $raw_url;
@@ -449,7 +459,7 @@ class WP_Stream_Importer {
 	 * @TODO: How can we process the videos?
 	 * @TODO: What other asset types are there?
 	 */
-	protected function url_processor_matched_asset_url( WP_Block_Markup_Url_Processor $p ) {
+	private function url_processor_matched_asset_url( WP_Block_Markup_Url_Processor $p ) {
 		return (
 			$p->get_tag() === 'IMG' &&
 			$p->get_inspected_attribute_name() === 'src' &&

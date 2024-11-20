@@ -22,6 +22,19 @@ class WP_Remote_File_Reader implements WP_Byte_Reader {
 		$this->url    = $url;
 	}
 
+	public function tell(): int {
+		return $this->bytes_already_read + $this->skip_bytes;
+	}
+
+	public function seek( $offset_in_file ): bool {
+		if ( $this->request ) {
+			_doing_it_wrong( __METHOD__, 'Cannot set a remote file reader cursor on a remote file reader that is already initialized.', '1.0.0' );
+			return false;
+		}
+		$this->skip_bytes = $offset_in_file;
+		return true;
+	}
+
 	public function next_bytes(): bool {
 		if ( null === $this->request ) {
 			$this->request = new WordPress\AsyncHttp\Request(
@@ -88,21 +101,6 @@ class WP_Remote_File_Reader implements WP_Byte_Reader {
 
 	public function get_bytes(): string|null {
 		return $this->current_chunk;
-	}
-
-	public function pause(): array|bool {
-		return array(
-			'offset_in_file' => $this->bytes_already_read + $this->skip_bytes,
-		);
-	}
-
-	public function resume( $paused_state ): bool {
-		if ( $this->request ) {
-			_doing_it_wrong( __METHOD__, 'Cannot resume a remote file reader that is already initialized.', '1.0.0' );
-			return false;
-		}
-		$this->skip_bytes = $paused_state['offset_in_file'];
-		return true;
 	}
 
 	public function is_finished(): bool {

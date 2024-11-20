@@ -4,6 +4,9 @@
  *
  * This exploration accompanies the WXR reader to inform a generic
  * data importing pipeline that's not specific to a single input format.
+ *
+ * @TODO: Support multiple data sources – filesystem directory tree, zip file, ...
+ * @TODO: Expose a cursor to allow resuming from where we left off.
  */
 
 class WP_Markdown_Directory_Tree_Reader implements Iterator {

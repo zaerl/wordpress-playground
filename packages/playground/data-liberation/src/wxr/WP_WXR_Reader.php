@@ -342,43 +342,42 @@ class WP_WXR_Reader implements Iterator {
 		),
 	);
 
-	public function pause() {
-		$upstream_state = $this->upstream ? $this->upstream->pause() : null;
-		if ( $upstream_state ) {
-			// @TODO: Don't assume this specific key name. Find a way to generalize
-			//        this to, e.g., remote HTTP byte sources.
-			$upstream_state['offset_in_file'] = $this->entity_byte_offset;
-		}
-		// @TODO: I don't like messing with internals of $paused_state. How else
-		//        can we do this? We need more than just an offset to also restore
-		//        XML breadcrumbs and the parsing context. Perhaps the cursor could
-		//        be a class with a method such as "override_byte_offset(int $offset)"?
-		//        Or resume() could have an optional argument?
-		$xml_state                                     = $this->xml->pause();
-		$xml_state['token_starts_at_in_current_chunk'] = 0;
-		$xml_state['upstream_bytes_forgotten']         = $this->entity_byte_offset;
-		return array(
-			'xml' => $xml_state,
-			'upstream' => $upstream_state,
-			'last_post_id' => $this->last_post_id,
-			'last_comment_id' => $this->last_comment_id,
-		);
-	}
-
-	public function resume( $paused_state ) {
-		// @TODO: Validate the paused state.
-		if ( $paused_state['upstream'] ) {
-			if ( ! $this->upstream ) {
-				// @TODO: _doing_it_wrong()
+	public static function create( WP_Byte_Reader $upstream = null, $cursor = null ) {
+		$xml_cursor = null;
+		if ( null !== $cursor ) {
+			$cursor = json_decode( $cursor, true );
+			if ( false === $cursor ) {
+				_doing_it_wrong(
+					__METHOD__,
+					'Invalid cursor provided for WP_WXR_Reader::create().',
+					null
+				);
 				return false;
 			}
-			$this->upstream->resume( $paused_state['upstream'] );
+			$xml_cursor = $cursor['xml'];
 		}
-		$this->xml->resume( $paused_state['xml'] );
-		$this->last_post_id    = $paused_state['last_post_id'];
-		$this->last_comment_id = $paused_state['last_comment_id'];
-		// @TODO: Should resume() call next_step() or just prepare the state?
-		$this->next_entity();
+
+		$xml    = WP_XML_Processor::create_for_streaming( '', $xml_cursor );
+		$reader = new WP_WXR_Reader( $xml );
+		if ( null !== $cursor ) {
+			$reader->last_post_id    = $cursor['last_post_id'];
+			$reader->last_comment_id = $cursor['last_comment_id'];
+		}
+		if ( null !== $upstream ) {
+			$reader->connect_upstream( $upstream );
+			if ( null !== $cursor ) {
+				if ( ! isset( $cursor['upstream'] ) ) {
+					_doing_it_wrong(
+						__METHOD__,
+						'Invalid cursor provided for WP_WXR_Reader::create(). The upstream offset was missing.',
+						null
+					);
+					return false;
+				}
+				$upstream->seek( $cursor['upstream'] );
+			}
+		}
+		return $reader;
 	}
 
 	/**
@@ -388,8 +387,31 @@ class WP_WXR_Reader implements Iterator {
 	 *
 	 * @param WP_XML_Processor $xml The XML processor to use.
 	 */
-	public function __construct() {
-		$this->xml = WP_XML_Processor::create_for_streaming();
+	protected function __construct( WP_XML_Processor $xml ) {
+		$this->xml = $xml;
+	}
+
+	public function get_reentrancy_cursor() {
+		/**
+		 * @TODO: Instead of adjusting the XML cursor internals, adjust the get_reentrancy_cursor()
+		 *        call to support $bookmark_name, e.g. $this->xml->get_reentrancy_cursor( 'last_entity' );
+		 *        If the cursor internal data was a part of every bookmark, this would have worked
+		 *        even after evicting the actual bytes where $last_entity is stored.
+		 */
+		$xml_cursor                                     = $this->xml->get_reentrancy_cursor();
+		$xml_cursor                                     = json_decode( base64_decode( $xml_cursor ), true );
+		$xml_cursor['token_starts_at_in_current_chunk'] = 0;
+		$xml_cursor['upstream_bytes_forgotten']         = $this->entity_byte_offset;
+		$xml_cursor                                     = base64_encode( json_encode( $xml_cursor ) );
+		return json_encode(
+			array(
+				'xml' => $xml_cursor,
+				// WP_Byte_Reader cursors are always integer byte offsets in the stream.
+				'upstream' => $this->entity_byte_offset,
+				'last_post_id' => $this->last_post_id,
+				'last_comment_id' => $this->last_comment_id,
+			)
+		);
 	}
 
 	/**
@@ -620,7 +642,7 @@ class WP_WXR_Reader implements Iterator {
 				if ( $this->xml->is_tag_opener() ) {
 					$this->set_entity_tag( $tag );
 					if ( array_key_exists( $this->xml->get_tag(), static::KNOWN_ENITIES ) ) {
-						$this->entity_byte_offset = $this->get_current_byte_offset();
+						$this->entity_byte_offset = $this->xml->get_token_byte_offset_in_the_input_stream();
 					}
 				}
 				continue;
@@ -676,7 +698,7 @@ class WP_WXR_Reader implements Iterator {
 					array_key_exists( $this->xml->get_tag(), static::KNOWN_SITE_OPTIONS )
 				);
 				if ( $is_site_option_opener ) {
-					$this->entity_byte_offset = $this->get_current_byte_offset();
+					$this->entity_byte_offset = $this->xml->get_token_byte_offset_in_the_input_stream();
 				}
 				continue;
 			}
@@ -818,21 +840,6 @@ class WP_WXR_Reader implements Iterator {
 	}
 
 	/**
-	 * Returns current's XML token offset in the input stream.
-	 *
-	 * @since WP_VERSION
-	 *
-	 * @return int The current byte offset.
-	 */
-	private function get_current_byte_offset() {
-		$paused_xml_state = $this->xml->pause();
-		return (
-			$paused_xml_state['token_starts_at_in_current_chunk'] +
-			$paused_xml_state['upstream_bytes_forgotten']
-		);
-	}
-
-	/**
 	 * Marks the current entity as emitted and updates tracking variables.
 	 *
 	 * @since WP_VERSION
@@ -901,7 +908,7 @@ class WP_WXR_Reader implements Iterator {
 	}
 
 	public function key(): string {
-		return sha1( json_encode( $this->pause() ) );
+		return $this->get_reentrancy_cursor();
 	}
 
 	public function valid(): bool {
@@ -909,6 +916,10 @@ class WP_WXR_Reader implements Iterator {
 	}
 
 	public function rewind(): void {
-		// noop
+		_doing_it_wrong(
+			__METHOD__,
+			'WP_WXR_Reader does not support rewinding.',
+			null
+		);
 	}
 }

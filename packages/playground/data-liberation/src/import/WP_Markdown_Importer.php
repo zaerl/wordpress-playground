@@ -2,14 +2,6 @@
 
 class WP_Markdown_Importer extends WP_Stream_Importer {
 
-	public static function create(
-		$entity_iterator_factory,
-		$options = array()
-	) {
-		$options = static::parse_options( $options );
-		return new WP_Markdown_Importer( $entity_iterator_factory, $options );
-	}
-
 	protected static function parse_options( $options ) {
 		if ( ! isset( $options['source_site_url'] ) ) {
 			_doing_it_wrong( __METHOD__, 'The source_site_url option is required.', '__WP_VERSION__' );

@@ -22,8 +22,7 @@
  * starting with 1.0, however, because most that's what most WXR
  * files declare.
  *
- * @TODO: Scrutinize pause() and resume() methods. Can we avoid exposing string
- *        indices and other internal state?
+ * @TODO: Include the cursor string in internal bookmarks and use it for seeking.
  *
  * @TODO: Track specific error states, expose informative messages, line
  *        numbers, indexes, and other debugging info.
@@ -647,54 +646,90 @@ class WP_XML_Processor {
 	/**
 	 *
 	 */
-	public static function create_from_string( $xml, $known_definite_encoding = 'UTF-8' ) {
-		if ( 'UTF-8' !== $known_definite_encoding ) {
-			return null;
+	public static function create_from_string( $xml, $cursor = null, $known_definite_encoding = 'UTF-8' ) {
+		$processor = static::create_for_streaming( $xml, $cursor, $known_definite_encoding );
+		if ( null === $processor ) {
+			return false;
 		}
-
-		$processor = new WP_XML_Processor( $xml, self::CONSTRUCTOR_UNLOCK_CODE );
 		$processor->input_finished();
 		return $processor;
 	}
 
-	public static function create_for_streaming( $xml = '', $known_definite_encoding = 'UTF-8' ) {
+	public static function create_for_streaming( $xml = '', $cursor = null, $known_definite_encoding = 'UTF-8' ) {
 		if ( 'UTF-8' !== $known_definite_encoding ) {
-			return null;
+			return false;
 		}
-		return new WP_XML_Processor( $xml, self::CONSTRUCTOR_UNLOCK_CODE );
+		$processor = new WP_XML_Processor( $xml, self::CONSTRUCTOR_UNLOCK_CODE );
+		if ( null !== $cursor && true !== $processor->initialize_from_cursor( $cursor ) ) {
+			return false;
+		}
+		return $processor;
 	}
 
 	/**
-	 * Pauses the processor and returns an array of the information needed to resume.
+	 * Returns a re-entrancy cursor – it's a string that can instruct a new XML
+	 * Processor instance to continue parsing from the current location in the
+	 * document.
 	 *
-	 * @TODO:
-	 * – What to do with bookmarks when pausing?
-	 * – Consider including all the below information in internal bookmarks. Consider using a logic
-	 *   similar to resume() in seek().
-	 * – Consider a WP_XML_Processor_Paused_State or a WP_XML_Processor_Bookmark class.
-	 * – Should we flush the enqueued lexical updates first?
+	 * The only stable part of this API is the return type of string. The consumer
+	 * of this method MUST NOT assume any specific structure of the returned
+	 * string. It will change without a warning between WordPress releases.
+	 *
+	 * This is not a tell() API. No XML Processor method will accept the cursor
+	 * to move to another location. The only way to use this cursor is creating
+	 * a new XML Processor instance. If you need to move around the document, use
+	 * `set_bookmark()` and `seek()`.
 	 */
-	public function pause() {
-		return array(
-			'token_starts_at_in_current_chunk' => $this->token_starts_at,
-			'upstream_bytes_forgotten' => $this->upstream_bytes_forgotten,
-			'parser_context' => $this->parser_context,
-			'stack_of_open_elements' => $this->stack_of_open_elements,
-			'expecting_more_input' => $this->expecting_more_input,
+	public function get_reentrancy_cursor() {
+		return base64_encode(
+			json_encode(
+				array(
+					'token_starts_at_in_current_chunk' => $this->token_starts_at,
+					'upstream_bytes_forgotten' => $this->upstream_bytes_forgotten,
+					'parser_context' => $this->parser_context,
+					'stack_of_open_elements' => $this->stack_of_open_elements,
+					'expecting_more_input' => $this->expecting_more_input,
+				)
+			)
 		);
 	}
 
 	/**
-	 * @TODO:
-	 * – Validate the paused state, return false if it's invalid.
+	 * Returns the byte offset in the input stream where the current token starts.
+	 *
+	 * You should probably not use this method.
+	 *
+	 * It's only exists to allow resuming the input stream at the same offset where
+	 * the XML parsing was finished. It will never expose any attribute's byte
+	 * offset and no method in the XML processor API will ever accept the byte offset
+	 * to move to another location. If you need to move around the document, use
+	 * `set_bookmark()` and `seek()` instead.
 	 */
-	public function resume( $paused_state ) {
-		$this->bytes_already_parsed     = $paused_state['token_starts_at_in_current_chunk'];
-		$this->upstream_bytes_forgotten = $paused_state['upstream_bytes_forgotten'];
-		$this->stack_of_open_elements   = $paused_state['stack_of_open_elements'];
-		$this->parser_context           = $paused_state['parser_context'];
-		$this->expecting_more_input     = $paused_state['expecting_more_input'];
-		$this->next_token();
+	public function get_token_byte_offset_in_the_input_stream() {
+		return $this->token_starts_at + $this->upstream_bytes_forgotten;
+	}
+
+	protected function initialize_from_cursor( $cursor ) {
+		if ( ! is_string( $cursor ) ) {
+			_doing_it_wrong( __METHOD__, 'Cursor must be a JSON-encoded string.', '1.0.0' );
+			return false;
+		}
+		$cursor = base64_decode( $cursor );
+		if ( false === $cursor ) {
+			_doing_it_wrong( __METHOD__, 'Invalid cursor provided to initialize_from_cursor().', '1.0.0' );
+			return false;
+		}
+		$cursor = json_decode( $cursor, true );
+		if ( false === $cursor || ! isset( $cursor['token_starts_at_in_current_chunk'], $cursor['upstream_bytes_forgotten'], $cursor['stack_of_open_elements'], $cursor['parser_context'], $cursor['expecting_more_input'] ) ) {
+			_doing_it_wrong( __METHOD__, 'Invalid cursor provided to initialize_from_cursor().', '1.0.0' );
+			return false;
+		}
+		$this->bytes_already_parsed     = $cursor['token_starts_at_in_current_chunk'];
+		$this->upstream_bytes_forgotten = $cursor['upstream_bytes_forgotten'];
+		$this->stack_of_open_elements   = $cursor['stack_of_open_elements'];
+		$this->parser_context           = $cursor['parser_context'];
+		$this->expecting_more_input     = $cursor['expecting_more_input'];
+		return true;
 	}
 
 	/**

@@ -8,13 +8,13 @@ require_once __DIR__ . '/bootstrap.php';
 
 /**
  * Don't run KSES on the attribute values during the import.
- * 
+ *
  * Without this filter, WP_HTML_Tag_Processor::set_attribute() will
  * assume the value is a URL and run KSES on it, which will incorrectly
  * prefix relative paths with http://.
- * 
+ *
  * For example:
- * 
+ *
  * > $html = new WP_HTML_Tag_Processor( '<img>' );
  * > $html->next_tag();
  * > $html->set_attribute( 'src', './_assets/log-errors.png' );
@@ -30,34 +30,37 @@ add_filter('wp_kses_uri_attributes', function() {
  * @TODO: Remove this in favor of a CLI command.
  */
 add_action('init', function() {
-    echo '<plaintext>';
+    return;
     $wxr_path = __DIR__ . '/tests/fixtures/wxr-simple.xml';
-    $entity_iterator_factory = function() use ($wxr_path) {
-        $wxr = new WP_WXR_Reader();
-        $wxr->connect_upstream(new WP_File_Reader($wxr_path));
-
-        return $wxr;
+    $entity_iterator_factory = function($cursor=null) use ($wxr_path) {
+        return WP_WXR_Reader::create(
+            new WP_File_Reader($wxr_path),
+            $cursor
+        );
     };
     $importer = WP_Stream_Importer::create(
         $entity_iterator_factory
     );
+    while($importer->next_step()) {
+        // ...
+    }
+    return;
     $importer->next_step();
-    $importer->next_step();
-    $importer->next_step();
-    $importer->next_step();
-    $importer->next_step();
-    $importer->next_step();
-    $paused_importer_state = $importer->pause();
+    $paused_importer_state = $importer->get_reentrancy_cursor();
+
+    echo "\n\n";
+    echo "moving to importer2\n";
+    echo "\n\n";
 
     $importer2 = WP_Stream_Importer::create(
-        $entity_iterator_factory
+        $entity_iterator_factory,
+        array(),
+        $paused_importer_state
     );
-    $importer2->resume($paused_importer_state);
     $importer2->next_step();
     $importer2->next_step();
     $importer2->next_step();
     // $importer2->next_step();
-
     // var_dump($importer2);
 
     die("YAY");
@@ -124,7 +127,7 @@ function data_liberation_admin_page() {
         data_liberation_process_import();
         echo '</pre>';
     }
-    
+
     ?>
         <h2>Active import</h2>
         <?php
@@ -186,9 +189,9 @@ function data_liberation_admin_page() {
         >
             <?php wp_nonce_field('data_liberation_import'); ?>
             <input type="hidden" name="action" value="data_liberation_import">
-            
+
             <h2>Import Content</h2>
-            
+
             <table class="form-table">
                 <tr>
                     <th scope="row">Import Type</th>
@@ -213,7 +216,7 @@ function data_liberation_admin_page() {
                         </label>
                     </td>
                 </tr>
-                
+
                 <tr data-wp-context='{ "importType": "wxr_file" }'
                     data-wp-class--hidden="!state.isImportTypeSelected">
                     <th scope="row">WXR File</th>
@@ -222,7 +225,7 @@ function data_liberation_admin_page() {
                         <p class="description">Upload a WordPress eXtended RSS (WXR) file</p>
                     </td>
                 </tr>
-                
+
                 <tr data-wp-context='{ "importType": "wxr_url" }'
                 data-wp-class--hidden="!state.isImportTypeSelected">
                     <th scope="row">WXR URL</th>
@@ -231,7 +234,7 @@ function data_liberation_admin_page() {
                         <p class="description">Enter the URL of a WXR file</p>
                     </td>
                 </tr>
-                
+
                 <tr data-wp-context='{ "importType": "markdown_zip" }'
                     data-wp-class--hidden="!state.isImportTypeSelected">
                     <th scope="row">Markdown ZIP</th>
@@ -248,7 +251,7 @@ function data_liberation_admin_page() {
         <h2>Previous Imports</h2>
 
         <p>TODO: Show a table of previous imports.</p>
-            
+
         <table class="form-table">
             <tr>
                 <th scope="row">Date</th>
@@ -367,7 +370,7 @@ add_action('admin_post_data_liberation_import', function() {
      */
     // if(is_wp_error(wp_schedule_event(time(), 'data_liberation_minute', 'data_liberation_process_import'))) {
     //     wp_delete_attachment($attachment_id, true);
-    //     // @TODO: More user friendly error message – maybe redirect back to the import screen and 
+    //     // @TODO: More user friendly error message – maybe redirect back to the import screen and
     //     //        show the error there.
     //     wp_die('Failed to schedule import – the "data_liberation_minute" schedule may not be registered.');
     // }
@@ -409,11 +412,11 @@ function data_liberation_create_importer($import) {
                 // @TODO: Save the error, report it to the user.
                 return;
             }
-            $entity_iterator_factory = function() use ($wxr_path) {
-                $wxr = new WP_WXR_Reader();
-                $wxr->connect_upstream(new WP_File_Reader($wxr_path));
-
-                return $wxr;
+            $entity_iterator_factory = function($cursor=null) use ($wxr_path) {
+                return WP_WXR_Reader::create(
+                    new WP_File_Reader($wxr_path),
+                    $cursor
+                );
             };
             return WP_Stream_Importer::create(
                 $entity_iterator_factory
@@ -421,10 +424,11 @@ function data_liberation_create_importer($import) {
 
         case 'wxr_url':
             $wxr_url = $import['wxr_url'];
-            $entity_iterator_factory = function() use ($wxr_url) {
-                $wxr = new WP_WXR_Reader();
-                $wxr->connect_upstream(new WP_Remote_File_Reader($wxr_url));
-                return $wxr;
+            $entity_iterator_factory = function($cursor=null) use ($wxr_url) {
+                return WP_WXR_Reader::create(
+                    new WP_Remote_File_Reader($wxr_url),
+                    $cursor
+                );
             };
             return WP_Stream_Importer::create(
                 $entity_iterator_factory
@@ -446,7 +450,10 @@ function data_liberation_create_importer($import) {
                 }
             }
             $markdown_root = $temp_dir;
-            $entity_iterator_factory = function() use ($markdown_root) {
+            $entity_iterator_factory = function($cursor=null) use ($markdown_root) {
+                if(null !== $cursor) {
+                    throw new \Exception('Resuming Markdown imports is not supported yet.');
+                }
                 return new WP_Markdown_Directory_Tree_Reader(
                     $markdown_root,
                     1000

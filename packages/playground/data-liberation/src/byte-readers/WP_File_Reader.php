@@ -19,25 +19,23 @@ class WP_File_Reader implements WP_Byte_Reader {
 		$this->chunk_size = $chunk_size;
 	}
 
-	/**
-	 * Really these are just `tell()` and `seek()` operations, only the state is more
-	 * involved than a simple offset. Hmm.
-	 */
-	public function pause(): array|bool {
-		return array(
-			// Save the previous offset, not the current one.
-			// This way, after resuming, the next read will yield the same $output_bytes
-			// as we have now.
-			'offset_in_file' => $this->offset_in_file - $this->last_chunk_size,
-		);
+	public function tell(): int {
+		// Save the previous offset, not the current one.
+		// This way, after resuming, the next read will yield the same $output_bytes
+		// as we have now.
+		return $this->offset_in_file - $this->last_chunk_size;
 	}
 
-	public function resume( $paused_state ): bool {
-		if ( $this->file_pointer ) {
-			_doing_it_wrong( __METHOD__, 'Cannot resume a file reader that is already initialized.', '1.0.0' );
+	public function seek( $offset_in_file ): bool {
+		if ( ! is_int( $offset_in_file ) ) {
+			_doing_it_wrong( __METHOD__, 'Cannot set a file reader cursor to a non-integer offset.', '1.0.0' );
 			return false;
 		}
-		$this->offset_in_file  = $paused_state['offset_in_file'];
+		if ( $this->file_pointer ) {
+			_doing_it_wrong( __METHOD__, 'Cannot set a file reader cursor on a file reader that is already initialized.', '1.0.0' );
+			return false;
+		}
+		$this->offset_in_file  = $offset_in_file;
 		$this->last_chunk_size = 0;
 		return true;
 	}
