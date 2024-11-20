@@ -118,9 +118,7 @@
  *
  * @TODO:
  *
- * - Save parser state after each entity or every `n` entities to speed it up. Then also save the `n`
- *   for a quick rewind after resuming.
- * - Resume parsing from saved state.
+ * - Revisit the need to implement the Iterator interface.
  *
  * @since WP_VERSION
  */

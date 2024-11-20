@@ -2,6 +2,16 @@
 
 class WP_Markdown_Importer extends WP_Stream_Importer {
 
+	public static function create_for_markdown_directory( $markdown_directory, $options = array(), $cursor = null ) {
+		return static::create(
+			function ( $cursor = null ) use ( $markdown_directory ) {
+				return WP_Markdown_Importer::create( $markdown_directory, $cursor );
+			},
+			$options,
+			$cursor
+		);
+	}
+
 	protected static function parse_options( $options ) {
 		if ( ! isset( $options['source_site_url'] ) ) {
 			_doing_it_wrong( __METHOD__, 'The source_site_url option is required.', '__WP_VERSION__' );

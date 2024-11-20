@@ -32,14 +32,8 @@ add_filter('wp_kses_uri_attributes', function() {
 add_action('init', function() {
     return;
     $wxr_path = __DIR__ . '/tests/fixtures/wxr-simple.xml';
-    $entity_iterator_factory = function($cursor=null) use ($wxr_path) {
-        return WP_WXR_Reader::create(
-            new WP_File_Reader($wxr_path),
-            $cursor
-        );
-    };
-    $importer = WP_Stream_Importer::create(
-        $entity_iterator_factory
+    $importer = WP_Stream_Importer::create_for_wxr_file(
+        $wxr_path
     );
     while($importer->next_step()) {
         // ...
@@ -52,8 +46,8 @@ add_action('init', function() {
     echo "moving to importer2\n";
     echo "\n\n";
 
-    $importer2 = WP_Stream_Importer::create(
-        $entity_iterator_factory,
+    $importer2 = WP_Stream_Importer::create_for_wxr_file(
+        $wxr_path,
         array(),
         $paused_importer_state
     );
@@ -412,26 +406,13 @@ function data_liberation_create_importer($import) {
                 // @TODO: Save the error, report it to the user.
                 return;
             }
-            $entity_iterator_factory = function($cursor=null) use ($wxr_path) {
-                return WP_WXR_Reader::create(
-                    new WP_File_Reader($wxr_path),
-                    $cursor
-                );
-            };
-            return WP_Stream_Importer::create(
-                $entity_iterator_factory
+            return WP_Stream_Importer::create_for_wxr_file(
+                $wxr_path
             );
 
         case 'wxr_url':
-            $wxr_url = $import['wxr_url'];
-            $entity_iterator_factory = function($cursor=null) use ($wxr_url) {
-                return WP_WXR_Reader::create(
-                    new WP_Remote_File_Reader($wxr_url),
-                    $cursor
-                );
-            };
-            return WP_Stream_Importer::create(
-                $entity_iterator_factory
+            return WP_Stream_Importer::create_for_wxr_url(
+                $import['wxr_url']
             );
 
         case 'markdown_zip':
@@ -450,17 +431,8 @@ function data_liberation_create_importer($import) {
                 }
             }
             $markdown_root = $temp_dir;
-            $entity_iterator_factory = function($cursor=null) use ($markdown_root) {
-                if(null !== $cursor) {
-                    throw new \Exception('Resuming Markdown imports is not supported yet.');
-                }
-                return new WP_Markdown_Directory_Tree_Reader(
-                    $markdown_root,
-                    1000
-                );
-            };
-            return WP_Markdown_Importer::create(
-                $entity_iterator_factory, [
+            return WP_Markdown_Importer::create_for_markdown_directory(
+                $markdown_root, [
                     'source_site_url' => 'file://' . $markdown_root,
                     'local_markdown_assets_root' => $markdown_root,
                     'local_markdown_assets_url_prefix' => '@site/',
