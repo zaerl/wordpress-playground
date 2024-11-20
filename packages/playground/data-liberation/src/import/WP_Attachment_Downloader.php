@@ -7,12 +7,12 @@ class WP_Attachment_Downloader {
 	private $client;
 	private $fps = array();
 	private $output_root;
-	private $output_paths  = array();
+	private $output_paths = array();
 
 	private $current_event;
-	private $pending_events = array();
+	private $pending_events   = array();
 	private $downloads_so_far = 0;
-	private $last_enqueued_resource_id;
+	private $enqueued_resource_id;
 
 	public function __construct( $output_root ) {
 		$this->client      = new Client();
@@ -24,7 +24,7 @@ class WP_Attachment_Downloader {
 	}
 
 	public function enqueue_if_not_exists( $url, $output_path ) {
-		$this->last_enqueued_resource_id = null;
+		$this->enqueued_resource_id = null;
 
 		$output_path = $this->output_root . '/' . ltrim( $output_path, '/' );
 		if ( file_exists( $output_path ) ) {
@@ -51,44 +51,30 @@ class WP_Attachment_Downloader {
 				if ( false === $local_path ) {
 					return false;
 				}
-				
+
 				// Just copy the file over.
 				// @TODO: think through the chmod of the created file.
 
-				$this->last_enqueued_resource_id = 'file:' . $this->downloads_so_far;
-				$this->pending_events[] = new WP_Attachment_Downloader_Event(
-					WP_Attachment_Downloader_Event::STARTED,
-					$url,
-					$output_path,
-					$this->last_enqueued_resource_id
-				);
-				$success                = copy( $local_path, $output_path );
-				$this->pending_events[] = new WP_Attachment_Downloader_Event(
+				$this->enqueued_resource_id = 'file:' . $this->downloads_so_far;
+				$success                    = copy( $local_path, $output_path );
+				$this->pending_events[]     = new WP_Attachment_Downloader_Event(
+					$this->enqueued_resource_id,
 					$success ? WP_Attachment_Downloader_Event::SUCCESS : WP_Attachment_Downloader_Event::FAILURE,
-					$url,
-					$output_path,
-					$this->last_enqueued_resource_id
 				);
 				return true;
 			case 'http':
 			case 'https':
 				$request                            = new Request( $url );
-				$this->last_enqueued_resource_id = 'http:' . $request->id;
+				$this->enqueued_resource_id         = 'http:' . $request->id;
 				$this->output_paths[ $request->id ] = $output_path;
-				$this->pending_events[] = new WP_Attachment_Downloader_Event(
-					WP_Attachment_Downloader_Event::STARTED,
-					$url,
-					$output_path,
-					$this->last_enqueued_resource_id
-				);
 				$this->client->enqueue( $request );
 				return true;
 		}
 		return false;
 	}
 
-	public function get_last_enqueued_resource_id() {
-		return $this->last_enqueued_resource_id;
+	public function get_enqueued_resource_id() {
+		return $this->enqueued_resource_id;
 	}
 
 	public function queue_full() {
@@ -149,10 +135,8 @@ class WP_Attachment_Downloader {
 						}
 					}
 					$this->pending_events[] = new WP_Attachment_Downloader_Event(
+						'http:' . $original_request_id,
 						WP_Attachment_Downloader_Event::FAILURE,
-						$request->original_request()->url,
-						$this->output_paths[ $original_request_id ],
-						'http:' . $original_request_id
 					);
 					unset( $this->output_paths[ $original_request_id ] );
 					break;
@@ -171,10 +155,8 @@ class WP_Attachment_Downloader {
 							}
 						}
 						$this->pending_events[] = new WP_Attachment_Downloader_Event(
+							'http:' . $original_request_id,
 							WP_Attachment_Downloader_Event::SUCCESS,
-							$request->original_request()->url,
-							$this->output_paths[ $original_request_id ],
-							'http:' . $original_request_id
 						);
 						unset( $this->output_paths[ $original_request_id ] );
 					}
@@ -183,24 +165,5 @@ class WP_Attachment_Downloader {
 		}
 
 		return true;
-	}
-}
-
-class WP_Attachment_Downloader_Event {
-
-	const STARTED = '#started';
-	const SUCCESS = '#success';
-	const FAILURE = '#failure';
-
-	public $type;
-	public $url;
-	public $target_path;
-	public $resource_id;
-
-	public function __construct( $type, $url, $target_path, $resource_id ) {
-		$this->type         = $type;
-		$this->url          = $url;
-		$this->target_path  = $target_path;
-		$this->resource_id  = $resource_id;
 	}
 }

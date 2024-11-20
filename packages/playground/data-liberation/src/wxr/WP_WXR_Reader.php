@@ -354,9 +354,9 @@ class WP_WXR_Reader implements Iterator {
 		//        XML breadcrumbs and the parsing context. Perhaps the cursor could
 		//        be a class with a method such as "override_byte_offset(int $offset)"?
 		//        Or resume() could have an optional argument?
-		$xml_state = $this->xml->pause();
+		$xml_state                                     = $this->xml->pause();
 		$xml_state['token_starts_at_in_current_chunk'] = 0;
-		$xml_state['upstream_bytes_forgotten'] = $this->entity_byte_offset;
+		$xml_state['upstream_bytes_forgotten']         = $this->entity_byte_offset;
 		return array(
 			'xml' => $xml_state,
 			'upstream' => $upstream_state,
@@ -901,7 +901,7 @@ class WP_WXR_Reader implements Iterator {
 	}
 
 	public function key(): string {
-		return sha1(json_encode($this->pause()));
+		return sha1( json_encode( $this->pause() ) );
 	}
 
 	public function valid(): bool {

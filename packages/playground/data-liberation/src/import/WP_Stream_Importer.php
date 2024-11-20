@@ -79,7 +79,7 @@ class WP_Stream_Importer {
 	}
 
 	public function resume( $paused_state ) {
-		$this->state = $paused_state['state'];
+		$this->state           = $paused_state['state'];
 		$this->entities_cursor = $paused_state['entities_cursor'];
 		// @TODO: Should resume() call next_step() or just prepare the state?
 		$this->next_step();
@@ -163,7 +163,7 @@ class WP_Stream_Importer {
 			switch ( $event->type ) {
 				case WP_Attachment_Downloader_Event::SUCCESS:
 				case WP_Attachment_Downloader_Event::FAILURE:
-					foreach( $this->frontloading_state as $state ) {
+					foreach ( $this->frontloading_state as $state ) {
 						$resource_id = $event->resource_id;
 						unset( $state['active_downloads'][ $resource_id ] );
 					}
@@ -171,9 +171,9 @@ class WP_Stream_Importer {
 			}
 		}
 
-		while(count($this->frontloading_state) > 0) {
+		while ( count( $this->frontloading_state ) > 0 ) {
 			$oldest_download_key = key( $this->frontloading_state );
-			if( ! empty( $this->frontloading_state[ $oldest_download_key ]['active_downloads'] ) ) {
+			if ( ! empty( $this->frontloading_state[ $oldest_download_key ]['active_downloads'] ) ) {
 				break;
 			}
 			// Advance the cursor to the next entity.
@@ -193,7 +193,7 @@ class WP_Stream_Importer {
 		if ( null === $this->entities_iterator ) {
 			$factory                 = $this->entity_iterator_factory;
 			$this->entities_iterator = $factory();
-			if( $this->entities_cursor ) {
+			if ( $this->entities_cursor ) {
 				$this->entities_iterator->resume( $this->entities_cursor );
 			}
 			$this->downloader = new WP_Attachment_Downloader( $this->options );
@@ -225,7 +225,7 @@ class WP_Stream_Importer {
 			 *   fix it later on. In a CLI-based Blueprint step importer scenario, we
 			 *   might want to provide an "image not found" placeholder OR ignore the
 			 *   failure.
-			 * 
+			 *
 			 * @TODO: Update the download progress:
 			 * * After every downloaded file.
 			 * * For large files, every time a full megabyte is downloaded above 10MB.
@@ -237,17 +237,17 @@ class WP_Stream_Importer {
 		 * Identify the static assets referenced in the current entity
 		 * and enqueue them for download.
 		 */
-		$entity = $this->entities_iterator->current();
-		$entity_key = $this->entities_iterator->key();
+		$entity                                  = $this->entities_iterator->current();
+		$entity_key                              = $this->entities_iterator->key();
 		$this->frontloading_state[ $entity_key ] = array(
 			'key' => $entity_key,
 			// @TODO: Consider making key() and pause() the same thing.
 			//        Then seek() and resume() would be the same, too!
 			'cursor' => $this->entities_iterator->pause(),
-			'active_downloads' => array()
+			'active_downloads' => array(),
 		);
 
-		$data   = $entity->get_data();
+		$data = $entity->get_data();
 		switch ( $entity->get_type() ) {
 			case 'site_option':
 				if ( $data['option_name'] === 'home' ) {
@@ -297,7 +297,7 @@ class WP_Stream_Importer {
 			$factory                 = $this->entity_iterator_factory;
 			$this->entities_iterator = $factory();
 			$this->importer          = new WP_Entity_Importer();
-			if( $this->entities_cursor ) {
+			if ( $this->entities_cursor ) {
 				$this->entities_iterator->resume( $this->entities_cursor );
 			}
 		}
@@ -310,7 +310,7 @@ class WP_Stream_Importer {
 			return;
 		}
 
-		$entity = $this->entities_iterator->current();
+		$entity      = $this->entities_iterator->current();
 		$attachments = array();
 		// Rewrite the URLs in the post.
 		switch ( $entity->get_type() ) {
@@ -373,7 +373,7 @@ class WP_Stream_Importer {
 		$enqueued = $this->downloader->enqueue_if_not_exists( $url, $output_path );
 		if ( $enqueued ) {
 			$resource_id = $this->downloader->get_last_enqueued_resource_id();
-			$entity_key = $this->entities_iterator->key();
+			$entity_key  = $this->entities_iterator->key();
 			$this->frontloading_state[ $entity_key ]['active_downloads'][ $resource_id ] = true;
 		}
 		return $enqueued;

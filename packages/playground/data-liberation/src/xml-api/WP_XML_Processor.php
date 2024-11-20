@@ -689,11 +689,11 @@ class WP_XML_Processor {
 	 * – Validate the paused state, return false if it's invalid.
 	 */
 	public function resume( $paused_state ) {
-		$this->bytes_already_parsed    = $paused_state['token_starts_at_in_current_chunk'];
+		$this->bytes_already_parsed     = $paused_state['token_starts_at_in_current_chunk'];
 		$this->upstream_bytes_forgotten = $paused_state['upstream_bytes_forgotten'];
-		$this->stack_of_open_elements  = $paused_state['stack_of_open_elements'];
-		$this->parser_context          = $paused_state['parser_context'];
-		$this->expecting_more_input    = $paused_state['expecting_more_input'];
+		$this->stack_of_open_elements   = $paused_state['stack_of_open_elements'];
+		$this->parser_context           = $paused_state['parser_context'];
+		$this->expecting_more_input     = $paused_state['expecting_more_input'];
 		$this->next_token();
 	}
 
