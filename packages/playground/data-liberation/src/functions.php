@@ -191,3 +191,23 @@ function wp_visit_file_tree( $dir ) {
 		new SplFileInfo( $dir )
 	);
 }
+
+/**
+ * Import a WXR file. Used in the CLI.
+ *
+ * @param string $file The path to the WXR file.
+ * @return void
+ */
+function data_liberation_import( $file ) {
+	$entity_iterator_factory = function () use ( $file ) {
+		$wxr = new WP_WXR_Reader();
+		$wxr->connect_upstream( new WP_File_Reader( $file ) );
+
+		return $wxr;
+	};
+
+	$importer = WP_Stream_Importer::create( $entity_iterator_factory );
+
+	$importer->frontload_assets();
+	$importer->import_entities();
+}
