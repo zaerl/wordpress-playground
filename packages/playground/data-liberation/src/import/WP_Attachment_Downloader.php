@@ -59,7 +59,7 @@ class WP_Attachment_Downloader {
 				$success                    = copy( $local_path, $output_path );
 				$this->pending_events[]     = new WP_Attachment_Downloader_Event(
 					$this->enqueued_resource_id,
-					$success ? WP_Attachment_Downloader_Event::SUCCESS : WP_Attachment_Downloader_Event::FAILURE,
+					$success ? WP_Attachment_Downloader_Event::SUCCESS : WP_Attachment_Downloader_Event::FAILURE
 				);
 				return true;
 			case 'http':
@@ -136,7 +136,7 @@ class WP_Attachment_Downloader {
 					}
 					$this->pending_events[] = new WP_Attachment_Downloader_Event(
 						'http:' . $original_request_id,
-						WP_Attachment_Downloader_Event::FAILURE,
+						WP_Attachment_Downloader_Event::FAILURE
 					);
 					unset( $this->output_paths[ $original_request_id ] );
 					break;
@@ -156,7 +156,7 @@ class WP_Attachment_Downloader {
 						}
 						$this->pending_events[] = new WP_Attachment_Downloader_Event(
 							'http:' . $original_request_id,
-							WP_Attachment_Downloader_Event::SUCCESS,
+							WP_Attachment_Downloader_Event::SUCCESS
 						);
 						unset( $this->output_paths[ $original_request_id ] );
 					}
